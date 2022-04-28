@@ -82,13 +82,13 @@ contract Annuity {
     }
 
     /**
-     Withdrawls ETH collateral from an Agreement up to the liquidation threshold
+     withdraws ETH collateral from an Agreement up to the liquidation threshold
      - Only the borrower can call this
      @param id, the agreement id
-     @param amount, the requested withdrawl amount in WETH
+     @param amount, the requested withdraw amount in WETH
      @return bool, indicates whether successful or not
     */
-    function withdrawlCollateral(uint256 id, uint256 amount)
+    function withdrawCollateral(uint256 id, uint256 amount)
         public
         returns (bool)
     {
