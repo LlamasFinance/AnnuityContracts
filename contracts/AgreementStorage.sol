@@ -27,5 +27,37 @@ contract AgreementStorage {
     }
 
     mapping(uint256 => Agreement) public agreements;
-    uint256 public numAgreement;
+    uint256 public numAgreements;
+
+    modifier onlyLender(uint256 agreementId) {
+        require(
+            agreements[agreementId].lender == msg.sender,
+            "Only lender can call this"
+        );
+        _;
+    }
+
+    modifier onlyIfRepaid(uint256 agreementId) {
+        require(
+            agreements[agreementId].status == Status.Repaid,
+            "Only available to call if borrower fully repaid"
+        );
+        _;
+    }
+
+    modifier onlyIfActive(uint256 agreementId) {
+        require(
+            agreements[agreementId].status == Status.Active,
+            "Only available to call if agreement is active"
+        );
+        _;
+    }
+
+    modifier onlyBorrower(uint256 agreementId) {
+        require(
+            agreements[agreementId].borrower == msg.sender,
+            "Only borrower can call this"
+        );
+        _;
+    }
 }

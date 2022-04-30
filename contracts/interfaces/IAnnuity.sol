@@ -19,6 +19,8 @@ interface IAnnuity {
         external
         payable;
 
+    function repay(uint256 agreementId, uint256 amount) external payable;
+
     function withdrawDeposit(uint256 agreementId) external;
 
     function withdrawCollateral(uint256 agreementId, uint256 amount) external;

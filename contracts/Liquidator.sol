@@ -20,15 +20,30 @@ contract Liquidator is
     Swapper,
     AgreementStorage
 {
-    address public constant _swapRouter = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    constructor() Swapper(ISwapRouter(_swapRouter)){}
+    uint256 public constant REQUIRED_RATIO = 15;
 
     function getUndercollateralizedAgreements()
         public
         view
         override
-        returns (uint256[] memory)
-    {}
+        returns (uint256[] memory needsLiquidation)
+    {
+        uint256 count = 0;
+        needsLiquidation = new uint256[](numAgreements);
+        uint256 collateralAmt;
+        for (uint256 id = 0; id < numAgreements; ++id) {
+            collateralAmt = agreements[id].collateral;
+            if (!isEnoughCollateral(id, collateralAmt)) {
+                needsLiquidation[count] = id;
+                count++;
+            }
+        }
+        if (count != numAgreements) {
+            assembly {
+                mstore(needsLiquidation, count)
+            }
+        }
+    }
 
     function liquidationCall(uint256 agreementId) private {}
 
@@ -47,4 +62,27 @@ contract Liquidator is
     function performUpkeep(
         bytes calldata /* performData */
     ) external override {}
+
+    modifier onlyIfEnoughCollateral(
+        uint256 agreementId,
+        uint256 collateralAmt
+    ) {
+        require(
+            isEnoughCollateral(agreementId, collateralAmt),
+            "Not enough collateral"
+        );
+        _;
+    }
+
+    function isEnoughCollateral(uint256 agreementId, uint256 collateralAmt)
+        internal
+        view
+        virtual
+        returns (bool isEnough)
+    {
+        uint256 ethUsd = PriceConsumer.getLatestPrice();
+        uint256 depositAmt = agreements[agreementId].deposit;
+        uint256 collateralValue = ethUsd / collateralAmt;
+        isEnough = (collateralValue > depositAmt * REQUIRED_RATIO);
+    }
 }
