@@ -8,9 +8,9 @@ pragma solidity ^0.8.0;
  **/
 interface IAnnuity {
     function createAgreement(
-        uint256 rate,
-        uint256 period,
-        uint256 deposit
+        uint256 _rate,
+        uint256 _duration,
+        uint256 _deposit
     ) external returns (uint256 agreementId);
 
     function borrow(uint256 agreementId, uint256 collateral) external payable;
