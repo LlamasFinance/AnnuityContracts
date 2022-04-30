@@ -80,9 +80,11 @@ contract Liquidator is
         virtual
         returns (bool isEnough)
     {
+        // get eth/usd
         uint256 ethUsd = PriceConsumer.getLatestPrice();
         uint256 depositAmt = agreements[agreementId].deposit;
-        uint256 collateralValue = ethUsd / collateralAmt;
+        // eth/(eth/usd) == usd
+        uint256 collateralValue = collateralAmt / ethUsd;
         isEnough = (collateralValue > depositAmt * REQUIRED_RATIO);
     }
 }
