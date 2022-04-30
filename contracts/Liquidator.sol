@@ -33,7 +33,7 @@ contract Liquidator is
         uint256 collateralAmt;
         for (uint256 id = 0; id < numAgreements; ++id) {
             collateralAmt = agreements[id].collateral;
-            if (!isEnoughCollateral(id, collateralAmt)) {
+            if (!_isEnoughCollateral(id, collateralAmt)) {
                 needsLiquidation[count] = id;
                 count++;
             }
@@ -68,13 +68,13 @@ contract Liquidator is
         uint256 collateralAmt
     ) {
         require(
-            isEnoughCollateral(agreementId, collateralAmt),
+            _isEnoughCollateral(agreementId, collateralAmt),
             "Not enough collateral"
         );
         _;
     }
 
-    function isEnoughCollateral(uint256 agreementId, uint256 collateralAmt)
+    function _isEnoughCollateral(uint256 agreementId, uint256 collateralAmt)
         internal
         view
         virtual
