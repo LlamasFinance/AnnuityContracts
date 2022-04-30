@@ -88,7 +88,6 @@ contract Liquidator is
         bool isEnough=false;
         // get price of ETH in USDC using chainlink price feed
         
-
         uint price =  PriceConsumer.getLatestPrice();
 
         //totalPrice is elevated by 26 (18:-eth-> wei && 8:- price return by pricefeed is already elevated) 18+8=26

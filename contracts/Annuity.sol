@@ -6,7 +6,6 @@ import "./AgreementStorage.sol";
 import "./Liquidator.sol";
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/"
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 
@@ -21,7 +20,10 @@ contract Annuity is IAnnuity, Liquidator ,AgreementStorage{
     address public constant _swapRouter =
         0xE592427A0AEce92De3Edee1F18E0157C05861564;
 
-    // pass addresses through constructor for real deployments
+    //USDC contract object
+    IERC20 public USDCcontract=IERC20(_USDC);
+
+    // TODO pass addresses through constructor for real deployments
     constructor() {
         swapRouter = ISwapRouter(_swapRouter);
         WETH9 = _WETH9;
@@ -46,26 +48,36 @@ contract Annuity is IAnnuity, Liquidator ,AgreementStorage{
             period:_period,
             rate:_rate,
             status:Status.Pending,
-            lender:payable(msg.sender),
-            borrower:payable(address(0))
+            lender:msg.sender,
+            borrower:address(0)
         });
         
         //mapping the id to Agreement
         numAgreement++;
         agreements[numAgreement]=newAgreement;
-        
+
+        //TODO emit createAgreement event
         return numAgreement;
     }
 
-    function borrow(uint256 agreementId, uint256 collateral)
+    function borrow(uint256 agreementId)
         public
         payable
         override
-        onlyIfEnoughCollateral(agreementId, collateral)
+        onlyIfEnoughCollateral(agreementId, msg.value)
     {
-        // transfer collateral
         // update Agreement
-        // emit Borrow
+        Agreement storage agreement=agreements[agreementId];
+        require(agreement.status==Status.Pending,"Agreement already closed");
+        agreement.start=block.timestamp;
+        agreement.borrower=msg.sender;
+        agreement.status=Status.Active;
+        agreement.collateral=msg.value;
+        
+         // transfer USDC to borrower
+        bool success= USDCcontract.transfer(msg.sender,agreement.deposit);
+        require(success,"Transfer of USDC failed");
+        //TODO emit Borrow
     }
 
     function addCollateral(uint256 agreementId, uint256 amount)
