@@ -1,3 +1,8 @@
+Use ```shell
+npx remixd -s ./contracts --remix-ide https://remix.ethereum.org
+
+````To connect local filesystem to remix!
+
 # Advanced Sample Hardhat Project
 
 This project demonstrates an advanced Hardhat use case, integrating other tools commonly used alongside Hardhat in the ecosystem.
@@ -23,7 +28,7 @@ npx prettier '**/*.{json,sol,md}' --check
 npx prettier '**/*.{json,sol,md}' --write
 npx solhint 'contracts/**/*.sol'
 npx solhint 'contracts/**/*.sol' --fix
-```
+````
 
 # Etherscan verification
 
