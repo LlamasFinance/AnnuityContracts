@@ -2,14 +2,20 @@
 pragma solidity ^0.8.0;
 
 import "./interfaces/IAnnuity.sol";
+import "./AgreementStorage.sol";
 import "./Liquidator.sol";
+import "hardhat/console.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/"
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 
 /**
  * @title Annuity
  * @author Team
  * @notice It defines the Annuity contract
  **/
-contract Annuity is IAnnuity, Liquidator {
+contract Annuity is IAnnuity, Liquidator ,AgreementStorage{
     address public constant _WETH9 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant _USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address public constant _swapRouter =
@@ -23,14 +29,32 @@ contract Annuity is IAnnuity, Liquidator {
     }
 
     function createAgreement(
-        uint256 rate,
-        uint256 period,
-        uint256 deposit
-    ) public override returns (uint256 agreementId) {
-        // transfer deposit
-        // create Agreement
-        // store Agreement
-        // emit CreateAgreement
+        uint256 _rate,
+        uint256 _period,
+        uint256 _deposit
+    ) public override returns (uint256) {
+        // require USDC value sent == deposit  && transfer usdc from sender to contract
+         (bool success,)=_USDC.delegatecall(abi.encodeWithSelector(USDCcontract.transfer.selector,address(this),_deposit));
+         require(success,"Transfer of funds to the contract failed");
+      
+        /* create Agreement with deposit, rate, period, msg.sender=lender, status=pending */
+        Agreement memory newAgreement= Agreement({
+            deposit:_deposit,
+            collateral:0,
+            paidBackAmt:0,
+            start:0,
+            period:_period,
+            rate:_rate,
+            status:Status.Pending,
+            lender:payable(msg.sender),
+            borrower:payable(address(0))
+        });
+        
+        //mapping the id to Agreement
+        numAgreement++;
+        agreements[numAgreement]=newAgreement;
+        
+        return numAgreement;
     }
 
     function borrow(uint256 agreementId, uint256 collateral)

@@ -29,7 +29,7 @@ contract PriceConsumer {
             ,
             ,
 
-        ) = (0, 3, 1, 2, 3); /*priceFeed.latestRoundData()*/
+        ) =  priceFeed.latestRoundData();
         latestPrice = uint256(price);
         
     }
