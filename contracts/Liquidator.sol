@@ -78,13 +78,29 @@ contract Liquidator is
         internal
         view
         virtual
-        returns (bool isEnough)
+        returns (bool)
     {
-        // get eth/usd
-        uint256 ethUsd = PriceConsumer.getLatestPrice();
-        uint256 depositAmt = agreements[agreementId].deposit;
-        // eth/(eth/usd) == usd
-        uint256 collateralValue = collateralAmt / ethUsd;
-        isEnough = (collateralValue > depositAmt * REQUIRED_RATIO);
+        // uint256 ethUsd = PriceConsumer.getLatestPrice();
+        // uint256 depositAmt = agreements[agreementId].deposit;
+        // uint256 collateralValue = ethUsd / collateralAmt;
+        // isEnough = (collateralValue > depositAmt * REQUIRED_RATIO);
+
+        bool isEnough = false;
+        // get price of ETH in USDC using chainlink price feed
+
+        uint256 price = PriceConsumer.getLatestPrice();
+
+        //totalPrice is elevated by 26 (18:-eth-> wei && 8:- price return by pricefeed is already elevated) 18+8=26
+        uint256 totalPrice = price * collateralAmt;
+
+        //agreements[id].deposit is already elevated by 6(USDC ERC20 contract has 6 decimal) so we multiply it by 1e20 to elevate it by 26 and then compare it with totalPrice
+        uint256 _depositUSDC = agreements[agreementId].deposit * 1e20;
+
+        if (totalPrice > ((3 * _depositUSDC) / 2)) {
+            isEnough = true;
+        } else {
+            isEnough = false;
+        }
+        return isEnough;
     }
 }
