@@ -80,25 +80,29 @@ contract Annuity is IAnnuity, Liquidator ,AgreementStorage{
         //TODO emit Borrow
     }
 
-    function addCollateral(uint256 agreementId, uint256 amount)
+    //collateral amount will be the msg.value
+    function addCollateral(uint256 agreementId)
         public
         payable
         override
         onlyBorrower(agreementId)
         onlyIfActive(agreementId)
     {
-        // transfer collateral amount
+        Agreement storage agreement=agreements[agreementId];
         // update Agreement
-        // emit AddCollateral
+        agreement.collateral+=msg.value;
+        //TODO emit AddCollateral
     }
 
-    function repay(uint256 agreementId, uint256 amount)
+    function repayLoan(uint256 agreementId, uint256 amount)
         public
         payable
-        override
+        onlyBorrower(agreementId)
         onlyIfActive(agreementId)
     {
+
         // transfer usdc amount
+        
         // update Agreement
         // emit Repay
     }
