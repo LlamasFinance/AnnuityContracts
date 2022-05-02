@@ -9,7 +9,7 @@ pragma solidity ^0.8.0;
 interface IAnnuity {
     function createAgreement(
         uint256 rate,
-        uint256 period,
+        uint256 duration,
         uint256 deposit
     ) external returns (uint256 agreementId);
 
@@ -24,4 +24,7 @@ interface IAnnuity {
     function withdrawDeposit(uint256 agreementId) external;
 
     function withdrawCollateral(uint256 agreementId, uint256 amount) external;
+
+    // events
+    event CreateAgreement(uint256 indexed id, address indexed lender);
 }

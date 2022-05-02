@@ -12,52 +12,62 @@ import "hardhat/console.sol";
  * @author Team
  * @notice It defines the Annuity contract
  **/
+
+
+// Agreement Storage --> (Swapper, PriceConsumer) --> Liquidator --> Annuity
+
 contract Annuity is IAnnuity, Liquidator {
     //USDC contract object
     IERC20 private usdcToken;
 
     // TODO pass addresses through constructor for real deployments
-    constructor() {
+
+ 
+
+    constructor(address usdc) {
         Swapper.swapRouter = ISwapRouter(AgreementStorage._swapRouter);
         Swapper.WETH9 = AgreementStorage._WETH9;
-        Swapper.USDC = AgreementStorage._USDC;
-        PriceConsumer.priceFeedAddr = AgreementStorage._USDC;
-        usdcToken = IERC20(AgreementStorage._USDC);
+        Swapper.USDC = usdc;
+        PriceConsumer.priceFeedAddr = usdc;
+        usdcToken = IERC20(usdc);
     }
 
     function createAgreement(
-        uint256 _rate,
-        uint256 _duration,
-        uint256 _deposit
+        uint256 rate,
+        uint256 duration,
+        uint256 deposit
     ) public override returns (uint256 agreementId) {
-        // require USDC value sent == deposit  && transfer usdc from sender to contract
-        (bool success, ) = _USDC.delegatecall(
-            abi.encodeWithSelector(
-                usdcToken.transfer.selector,
-                address(this),
-                _deposit
-            )
+        // transfer lender's usdc to this contract
+        TransferHelper.safeTransferFrom(
+            address(usdcToken),
+            msg.sender,
+            address(this),
+            deposit
         );
-        require(success, "Transfer of funds to the contract failed");
 
-        /* create Agreement with deposit, rate, period, msg.sender=lender, status=pending */
+        /// create Agreement
         Agreement memory newAgreement = Agreement({
-            deposit: _deposit,
+            deposit: deposit,
             collateral: 0,
             repaidAmt: 0,
             start: 0,
-            duration: _duration,
-            rate: _rate,
+            duration: duration,
+            rate: rate,
+
             status: Status.Pending,
             lender: payable(msg.sender),
             borrower: payable(address(0))
         });
 
-        //mapping the id to Agreement
+
+        // increment agreement count to use as id for mapping
         numAgreements++;
+        console.log("num agreements ", numAgreements);
         agreements[numAgreements] = newAgreement;
 
-        //TODO emit createAgreement event
+        // emit event and return id
+        emit CreateAgreement(numAgreements, msg.sender);
+
         return numAgreements;
     }
 
