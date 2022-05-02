@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.7;
+pragma solidity ^0.8.0;
 
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "hardhat/console.sol";
 
 contract PriceConsumer {
     AggregatorV3Interface internal priceFeed;
+    address internal priceFeedAddr;
 
     /**
      * Network: Kovan
@@ -13,9 +14,7 @@ contract PriceConsumer {
      * Address: 0x9326BFA02ADD2366b30bacB125260Af641031331
      */
     constructor() {
-        /*priceFeed = AggregatorV3Interface(
-            0x9326BFA02ADD2366b30bacB125260Af641031331
-        );*/
+        priceFeed = AggregatorV3Interface(priceFeedAddr);
     }
 
     /**
@@ -29,8 +28,7 @@ contract PriceConsumer {
             ,
             ,
 
-        ) =  priceFeed.latestRoundData();
+        ) = priceFeed.latestRoundData();
         latestPrice = uint256(price);
-        
     }
 }
