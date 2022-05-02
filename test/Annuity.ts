@@ -1,19 +1,46 @@
+import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { Annuity, IERC20, USDC } from "../typechain";
+import { data } from "./Annuity.data";
 
 describe("Annuity", function () {
-  it("Should return the new greeting once it's changed", async function () {
-    const Greeter = await ethers.getContractFactory("Greeter");
-    const greeter = await Greeter.deploy("Hello, world!");
-    await greeter.deployed();
+  let annuity: Annuity;
+  let usdc: USDC;
+  let deployer: SignerWithAddress,
+    lender: SignerWithAddress,
+    borrower: SignerWithAddress;
+  beforeEach(async () => {
+    // set up accounts we'll be using.
+    [deployer, lender, borrower] = await ethers.getSigners();
+    // deploy mocks
+    let USDC = await ethers.getContractFactory("USDC");
+    // deployer has 500k usdc
+    usdc = await USDC.deploy(data.usdcMintAmt.toString());
+    // deploy contract
+    let Annuity = await ethers.getContractFactory("Annuity");
+    annuity = await Annuity.deploy(usdc.address);
+    await annuity.deployed();
+    console.log(annuity.address, deployer.address);
+  });
 
-    expect(await greeter.greet()).to.equal("Hello, world!");
+  it("Should createAgreement()", async function () {
+    const { rate, duration, deposit } = data.annuityObj;
+    usdc.transfer(lender.address, deposit);
 
-    const setGreetingTx = await greeter.setGreeting("Hola, mundo!");
+    // creating an agreement should return an agreement id of 1
+    usdc.connect(lender).approve(annuity.address, deposit);
+    const tx = await annuity
+      .connect(lender)
+      .createAgreement(rate, duration, deposit);
+    const receipt = await tx.wait();
+    // use emitted event to double check that id is correct
+    const id = receipt.events?.filter((x) => {
+      return x.event == "CreateAgreement";
+    })[0].args?.id;
+    expect(id).to.equal(1);
 
-    // wait until the transaction is mined
-    await setGreetingTx.wait();
-
-    expect(await greeter.greet()).to.equal("Hola, mundo!");
+    // numAgreements should equal 1
+    expect(await annuity.numAgreements()).to.equal(1);
   });
 });

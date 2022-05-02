@@ -14,8 +14,33 @@ async function main() {
   // await hre.run('compile');
 
   // We get the contract to deploy
+
+  // mocks
+  const MockV3Aggregator = await ethers.getContractFactory("MockV3Aggregator");
+  const mockV3Aggregator = await MockV3Aggregator.deploy(0, 0);
+
+  await mockV3Aggregator.deployed();
+  // -----------
+  console.log("MockV3Aggregator deployed to:", mockV3Aggregator.address);
+
+  const USDC = await ethers.getContractFactory("USDC");
+  const usdc = await USDC.deploy(0);
+
+  await usdc.deployed();
+
+  console.log("USDC deployed to:", usdc.address);
+  // -----------
+  const WETH9 = await ethers.getContractFactory("WETH9");
+  const weth9 = await WETH9.deploy(0);
+
+  await weth9.deployed();
+
+  console.log("WETH9 deployed to:", weth9.address);
+  // -----------
+
+  // main
   const Annuity = await ethers.getContractFactory("Annuity");
-  const annuity = await Annuity.deploy("Hello, Annuity!");
+  const annuity = await Annuity.deploy(usdc.address);
 
   await annuity.deployed();
 
