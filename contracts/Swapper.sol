@@ -28,7 +28,7 @@ contract Swapper {
     /// @param amountIn The exact amount of WETH9 that will be swapped for WETH9.
     /// @return amountOut The amount of WETH9 received.
     function swapExactInputSingle(uint256 amountIn)
-        external
+        external 
         returns (uint256 amountOut)
     {
         // msg.sender must approve this contract

@@ -1,3 +1,12 @@
+/*
+Doubts to ask to colin -->>
+    1.Reason for using TransferHelper.safeTransferFrom? => When we use TransferHelper.safeTransferFrom the user has to approove the Annuity contract with the funds(USDC) first...Instead if we use delegateCall we dont need to do that.
+    2.In functions borrow() , addToCollateral() and withdrawCollateralAfterTotalRepay() whats the use of amount parameter?...in these func the borrower is essentially paying eth(in form of wei) as collateral , so we can directly use msg.value to check how eth the borrwer has paid and if it is enough as collateral.
+    3. When do a agreement closes(agreement.status=Status.Closed)? Is it when the lender withdraw his funds(with interest) back or Is it when the borrower withdraw all his collateral after replaying the total debt(with interest)?
+
+
+*/
+
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
@@ -13,16 +22,29 @@ import "hardhat/console.sol";
  * @notice It defines the Annuity contract
  **/
 
-
 // Agreement Storage --> (Swapper, PriceConsumer) --> Liquidator --> Annuity
 
 contract Annuity is IAnnuity, Liquidator {
+    address owner;
     //USDC contract object
     IERC20 private usdcToken;
 
-    // TODO pass addresses through constructor for real deployments
+    //Events
+    event CreateAgreement(uint256 agreementId, address lender);
+    event BorrowedAgreement(uint256 agreementId, address borrower);
+    event RepaidAgreement(uint256 agreementId, uint256 amount);
+    event AddCollateral(uint256 agreementId, uint256 amount);
+    event WithdrawDeposit(uint256 agreementId, uint256 amount);
+    event WithdrawCallateralBeforeTotalRepay(
+        uint256 agreementId,
+        uint256 amount
+    );
+    event WithdrawTotalCollateralAfterTotalRepay(
+        uint256 agreementId,
+        uint256 amount
+    );
 
- 
+    // TODO pass addresses through constructor for real deployments
 
     constructor(address usdc) {
         Swapper.swapRouter = ISwapRouter(AgreementStorage._swapRouter);
@@ -30,40 +52,63 @@ contract Annuity is IAnnuity, Liquidator {
         Swapper.USDC = usdc;
         PriceConsumer.priceFeedAddr = usdc;
         usdcToken = IERC20(usdc);
+        owner = msg.sender;
     }
 
     function createAgreement(
-        uint256 rate,
-        uint256 duration,
-        uint256 deposit
+        uint256 _rate,
+        uint256 _duration,
+        uint256 _deposit
     ) public override returns (uint256 agreementId) {
-        // transfer lender's usdc to this contract
-        TransferHelper.safeTransferFrom(
-            address(usdcToken),
-            msg.sender,
-            address(this),
-            deposit
+        //minimum deposit a lender can lend--> 1000USDC
+        require(
+            _deposit >= 1000000000,
+            "Cant deposit funds lesser than 1000 USDC"
         );
-
         /// create Agreement
+        uint256 totalSecInYear = 31536000;
+        //formula for caculating the totalPayBackAmountWithInterest
+        uint256 _totalPayBackAmountWithInterest = (_deposit /
+            (100 * totalSecInYear)) *
+            (100 * totalSecInYear + (_rate * _duration));
+
         Agreement memory newAgreement = Agreement({
-            deposit: deposit,
+            deposit: _deposit,
             collateral: 0,
             repaidAmt: 0,
+            totalPayBackAmountWithInterest: _totalPayBackAmountWithInterest,
             start: 0,
-            duration: duration,
-            rate: rate,
-
+            duration: _duration,
+            rate: _rate,
             status: Status.Pending,
             lender: payable(msg.sender),
             borrower: payable(address(0))
         });
 
-
         // increment agreement count to use as id for mapping
         numAgreements++;
         console.log("num agreements ", numAgreements);
         agreements[numAgreements] = newAgreement;
+
+        // transfer lender's usdc to this contract
+
+        // //delegatecall approach
+        // (bool success, ) = address(usdcToken).delegatecall(
+        //     abi.encodeWithSelector(
+        //         usdcToken.transfer.selector,
+        //         address(this),
+        //         deposit
+        //     )
+        // );
+
+        TransferHelper.safeTransferFrom(
+            address(usdcToken),
+            msg.sender,
+            address(this),
+            _deposit
+        );
+
+        // require(success, "Transfer of USDC token failed");
 
         // emit event and return id
         emit CreateAgreement(numAgreements, msg.sender);
@@ -93,7 +138,7 @@ contract Annuity is IAnnuity, Liquidator {
         // transfer USDC to borrower
         bool success = usdcToken.transfer(msg.sender, agreement.deposit);
         require(success, "Transfer of USDC failed");
-        //TODO emit Borrow
+        emit BorrowedAgreement(agreementId, msg.sender);
     }
 
     function addCollateral(uint256 agreementId, uint256 amount)
@@ -103,39 +148,48 @@ contract Annuity is IAnnuity, Liquidator {
         onlyBorrower(agreementId)
         onlyIfActive(agreementId)
     {
-        require(amount==msg.value,"Amount is not equal to msg.value");
+        require(amount == msg.value, "Amount is not equal to msg.value");
         // transfer collateral amount
         // update Agreement
-        Agreement storage agreement=agreements[agreementId];
-        agreement.collateral+=amount;
-        //TODO emit AddCollateral
+        Agreement storage agreement = agreements[agreementId];
+        agreement.collateral += amount;
+
+        emit AddCollateral(agreementId, amount);
     }
 
     function repay(uint256 agreementId, uint256 amount)
         public
+        payable
+        override
         onlyBorrower(agreementId)
         onlyIfActive(agreementId)
     {
-        // check if amount >0
-        require(amount>0,"Amount should be grater than zero");
-        Agreement storage agreement=agreements[agreementId];
-        uint agreementLoanAmount=agreement.deposit;
+        require(amount > 0, "Amount should be grater than zero");
+        Agreement storage agreement = agreements[agreementId];
 
-        //check if repay amount is greater than borrowed amount , if yes the send the diff back to borrower.
-        uint totalPayBackAmountWithInterest;//TODO calculate this amount
-        
-        if(amount>=payBackAmountWithInterest){
-          (bool success,)=  _USDC.delegatecall(abi.encodeWithSelector(usdcToken.transfer,selector,address(this),payBackAmountWithInterest));
-          require(success,"Transfer of USDC to contract failed");
-          agreement.repaidAmt=payBackAmountWithInterest;
-          agreement.status=Status.Repaid;
-        } else{
-            //TODO 
+        uint256 totalPayBackAmountWithInterest = agreement
+            .totalPayBackAmountWithInterest;
+
+        uint256 repaidAmt = agreement.repaidAmt;
+        // the borrower can repay the maximum amount of totalPayBackAmountWithInterest
+        if (repaidAmt + amount > totalPayBackAmountWithInterest) {
+            amount = totalPayBackAmountWithInterest - repaidAmt;
         }
-        // transfer usdc amount
+        //update the repaidAmt of agreement
+        agreement.repaidAmt += amount;
 
-        // update Agreement
-        // emit Repay
+        if (agreement.repaidAmt == totalPayBackAmountWithInterest) {
+            agreement.status = Status.Repaid;
+        }
+
+        // transfer usdc amount
+        TransferHelper.safeTransferFrom(
+            address(usdcToken),
+            msg.sender,
+            address(this),
+            amount
+        );
+        emit RepaidAgreement(agreementId, amount);
     }
 
     function withdrawDeposit(uint256 agreementId)
@@ -144,12 +198,26 @@ contract Annuity is IAnnuity, Liquidator {
         onlyLender(agreementId)
         onlyIfRepaid(agreementId)
     {
-        // transfer deposit
         // update Agreement
+        Agreement storage agreement = agreements[agreementId];
+        agreement.status = Status.Closed;
+        // transfer deposit
+        uint256 totalPayBackAmountWithInterest = agreement
+            .totalPayBackAmountWithInterest;
+        bool success = usdcToken.transfer(
+            msg.sender,
+            totalPayBackAmountWithInterest
+        );
+        require(success, "Transfer of USDC failded");
         // emit WithdrawDeposit
+        emit WithdrawDeposit(agreementId, totalPayBackAmountWithInterest);
     }
 
-    function withdrawCollateral(uint256 agreementId, uint256 amount)
+    //if in case the price of eth rices and borrower wants to withdraw some collateral(still the minimum collateral must be there)
+    function withdrawCollateralBeforeTotalRepay(
+        uint256 agreementId,
+        uint256 amount
+    )
         public
         override
         onlyBorrower(agreementId)
@@ -157,9 +225,60 @@ contract Annuity is IAnnuity, Liquidator {
             agreementId,
             (agreements[agreementId].collateral - amount)
         )
+        onlyIfActive(agreementId)
     {
-        // transfer collateral
         // update Agreement
-        // emit WithdrawCollateral
+        Agreement storage agreement = agreements[agreementId];
+        agreement.collateral -= amount;
+        // transfer collateral
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(
+            success,
+            "Transfering of some part of collateral to borrower failed"
+        );
+        // emit WithdrawCallateralBeforeRepay
+        emit WithdrawCallateralBeforeTotalRepay(agreementId, amount);
+    }
+
+    //In case borrower has repaid the totalPayBackAmountWithInterest and wants to withdraw his total collateral
+    function withdrawCollateralAfterTotalRepay(uint256 agreementId)
+        public
+        override
+        onlyBorrower(agreementId)
+    {
+        Agreement storage agreement = agreements[agreementId];
+        require(
+            (agreement.status == Status.Repaid ||
+                agreement.status == Status.Closed),
+            "Agreement not settled yet"
+        );
+        //check if the collateral of this agreement is already withdrawn or not
+        require(
+            !totalCollateralWithdrawn[agreementId],
+            "total collateral of this agrreement is already withdrawn"
+        );
+
+        // //check If borrower repaid the totalPayBackAmountWithInterest then transfer all the collateral
+        // require(
+        //     agreement.repaidAmt == agreement.totalPayBackAmountWithInterest,
+        //     "Agreement not repaid fully"
+        // );
+        // set the mapping to true
+        totalCollateralWithdrawn[agreementId] = true;
+        uint256 totalCollateral = agreement.collateral;
+
+        //transfer the total collateral of agreement to borrower
+        (bool success, ) = msg.sender.call{value: totalCollateral}("");
+        require(success, "Transfering of collateral to borrower failed");
+        emit WithdrawTotalCollateralAfterTotalRepay(
+            agreementId,
+            totalCollateral
+        );
+    }
+
+    function withdrawAllfunds() public {
+        require(msg.sender == owner, "you are not the owner");
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "Transfer failed");
     }
 }
