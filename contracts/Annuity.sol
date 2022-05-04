@@ -62,8 +62,8 @@ contract Annuity is IAnnuity, Liquidator {
     ) public override returns (uint256 agreementId) {
         //minimum deposit a lender can lend--> 1000USDC
         require(
-            _deposit >= 1000000000,
-            "Cant deposit funds lesser than 1000 USDC"
+            _deposit >= 3154000000,
+            "Cant deposit funds lesser than 3154000000 USDC"
         );
         /// create Agreement
         uint256 totalSecInYear = 31536000;
