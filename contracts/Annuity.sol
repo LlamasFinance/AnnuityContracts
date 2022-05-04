@@ -33,7 +33,7 @@ contract Annuity is IAnnuity, Liquidator {
         )
         returns (uint256 agreementId)
     {
-        require(rate <= 10, "Rate can't be greater than 100%");
+        require(rate <= 10, "Rate can't be greater than 10%");
 
         // transfer lender's usdc to this contract
         TransferHelper.safeTransferFrom(
@@ -196,3 +196,12 @@ contract Annuity is IAnnuity, Liquidator {
         TransferHelper.safeTransferETH(agreement.borrower, amount);
     }
 }
+
+/**
+    Essentials:
+     - lender creates agreement
+     - borrow selects agreement to borrow from and post collateral
+     - borrower gets liquidated by chainlink keepers if the value of their collateral drops below the amount they're borrowing
+     - borrower can repay the loan
+     - lender gets deposit + interest back after borrower repays loan
+ */
