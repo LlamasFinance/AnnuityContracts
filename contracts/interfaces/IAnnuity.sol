@@ -26,5 +26,30 @@ interface IAnnuity {
     function withdrawCollateral(uint256 agreementId, uint256 amount) external;
 
     // events
-    event CreateAgreement(uint256 indexed id, address indexed lender);
+    event CreateAgreement(
+        uint256 indexed id,
+        address indexed lender,
+        uint256 deposit
+    );
+    event Borrow(
+        uint256 indexed id,
+        address indexed borrower,
+        uint256 indexed collateral
+    );
+    event AddCollateral(
+        uint256 indexed id,
+        address indexed borrower,
+        uint256 indexed amount
+    );
+    event Repay(
+        uint256 indexed id,
+        address indexed borrower,
+        uint256 indexed amount,
+        uint256 newStatus
+    );
+    event WithdrawDeposit(
+        uint256 indexed id,
+        address indexed lender,
+        uint256 indexed futureValue
+    );
 }

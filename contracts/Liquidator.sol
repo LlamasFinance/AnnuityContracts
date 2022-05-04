@@ -13,13 +13,7 @@ import "@chainlink/contracts/src/v0.8/KeeperBase.sol";
  * @notice It defines the Liquidator contract
  **/
 
-contract Liquidator is
-    ILiquidator,
-    KeeperBase,
-    PriceConsumer,
-    Swapper,
-    AgreementStorage
-{
+contract Liquidator is ILiquidator, KeeperBase, PriceConsumer, Swapper {
     uint256 public constant REQUIRED_RATIO = 15;
 
     function getUndercollateralizedAgreements()
@@ -67,10 +61,10 @@ contract Liquidator is
         uint256 agreementId,
         uint256 collateralAmt
     ) {
-        require(
+        /*require(
             _isEnoughCollateral(agreementId, collateralAmt),
             "Not enough collateral"
-        );
+        );*/
         _;
     }
 

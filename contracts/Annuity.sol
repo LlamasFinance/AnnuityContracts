@@ -13,25 +13,28 @@ import "hardhat/console.sol";
  * @notice It defines the Annuity contract
  **/
 
-// Agreement Storage --> (Swapper, PriceConsumer) --> Liquidator --> Annuity
 contract Annuity is IAnnuity, Liquidator {
-    //USDC contract object
-    IERC20 private usdcToken;
-
-    // TODO pass addresses through constructor for real deployments
-    constructor(address usdc) {
-        Swapper.swapRouter = ISwapRouter(AgreementStorage._swapRouter);
-        Swapper.WETH9 = AgreementStorage._WETH9;
-        Swapper.USDC = usdc;
-        PriceConsumer.priceFeedAddr = usdc;
-        usdcToken = IERC20(usdc);
+    constructor(address usdc, address weth) {
+        addrUSDC = usdc;
+        usdcToken = IERC20(addrUSDC);
+        wethToken = IWETH9(weth);
     }
 
     function createAgreement(
         uint256 rate,
         uint256 duration,
         uint256 deposit
-    ) public override returns (uint256 agreementId) {
+    )
+        public
+        override
+        onlyIfValuesMatch(
+            usdcToken.allowance(msg.sender, address(this)),
+            deposit
+        )
+        returns (uint256 agreementId)
+    {
+        require(rate <= 10, "Rate can't be greater than 100%");
+
         // transfer lender's usdc to this contract
         TransferHelper.safeTransferFrom(
             address(usdcToken),
@@ -41,10 +44,12 @@ contract Annuity is IAnnuity, Liquidator {
         );
 
         /// create Agreement
+        uint256 futureValue = (deposit * (100 + rate * duration)) / 100;
         Agreement memory newAgreement = Agreement({
             deposit: deposit,
             collateral: 0,
             repaidAmt: 0,
+            futureValue: futureValue,
             start: 0,
             duration: duration,
             rate: rate,
@@ -55,11 +60,10 @@ contract Annuity is IAnnuity, Liquidator {
 
         // increment agreement count to use as id for mapping
         numAgreements++;
-        console.log("num agreements ", numAgreements);
         agreements[numAgreements] = newAgreement;
 
         // emit event and return id
-        emit CreateAgreement(numAgreements, msg.sender);
+        emit CreateAgreement(numAgreements, msg.sender, deposit);
         return numAgreements;
     }
 
@@ -67,25 +71,40 @@ contract Annuity is IAnnuity, Liquidator {
         public
         payable
         override
-        onlyIfEnoughCollateral(agreementId, msg.value)
         onlyIfPending(agreementId)
+        onlyIfEnoughCollateral(agreementId, msg.value)
+        onlyIfValuesMatch(msg.value, collateral)
     {
-        // require msg.value == collateral
-        require(
-            msg.value == collateral,
-            "Actual sent value doesn't match collateral"
-        );
+        console.log("Borrow msg.value received : ", msg.value);
+        // convert eth to weth
+        TransferHelper.safeTransferETH(address(wethToken), collateral);
+
         // update Agreement
         Agreement storage agreement = agreements[agreementId];
+        // solhint-disable-next-line not-rely-on-time
         agreement.start = block.timestamp;
         agreement.borrower = payable(msg.sender);
         agreement.status = Status.Active;
-        agreement.collateral = msg.value;
+        agreement.collateral = collateral;
 
-        // transfer USDC to borrower
-        bool success = usdcToken.transfer(msg.sender, agreement.deposit);
-        require(success, "Transfer of USDC failed");
-        //TODO emit Borrow
+        // transfer deposit USDC to borrower
+        console.log(
+            "Contract USDC Balance before: ",
+            usdcToken.balanceOf(address(this))
+        );
+        console.log("details", agreement.deposit, agreement.borrower);
+        TransferHelper.safeTransferFrom(
+            address(usdcToken),
+            address(this),
+            agreement.borrower,
+            agreement.deposit
+        );
+        console.log(
+            "Borrower USDC Balance after: ",
+            usdcToken.balanceOf(agreement.borrower)
+        );
+
+        emit Borrow(agreementId, msg.sender, collateral);
     }
 
     function addCollateral(uint256 agreementId, uint256 amount)
@@ -94,10 +113,12 @@ contract Annuity is IAnnuity, Liquidator {
         override
         onlyBorrower(agreementId)
         onlyIfActive(agreementId)
+        onlyIfValuesMatch(msg.value, amount)
     {
-        // transfer collateral amount
-        // update Agreement
-        // emit AddCollateral
+        Agreement storage agreement = agreements[agreementId];
+        agreement.collateral += amount;
+        TransferHelper.safeTransferETH(address(wethToken), amount);
+        emit AddCollateral(agreementId, agreement.borrower, amount);
     }
 
     function repay(uint256 agreementId, uint256 amount)
@@ -105,10 +126,37 @@ contract Annuity is IAnnuity, Liquidator {
         payable
         override
         onlyIfActive(agreementId)
+        onlyIfValuesMatch(
+            usdcToken.allowance(msg.sender, address(this)),
+            amount
+        )
     {
-        // transfer usdc amount
-        // update Agreement
-        // emit Repay
+        Agreement storage agreement = agreements[agreementId];
+        uint256 repaidAmt = agreement.repaidAmt;
+        uint256 futureValue = agreement.futureValue;
+        if (repaidAmt + amount > futureValue) {
+            amount = futureValue - repaidAmt;
+            // update agreement
+            agreement.status = Status.Repaid;
+        }
+
+        // update agreement
+        agreement.repaidAmt += amount;
+
+        // transfer USDC to contract
+        TransferHelper.safeTransferFrom(
+            address(usdcToken),
+            msg.sender,
+            address(this),
+            amount
+        );
+
+        emit Repay(
+            agreementId,
+            agreement.borrower,
+            amount,
+            uint256(agreement.status)
+        );
     }
 
     function withdrawDeposit(uint256 agreementId)
@@ -117,9 +165,20 @@ contract Annuity is IAnnuity, Liquidator {
         onlyLender(agreementId)
         onlyIfRepaid(agreementId)
     {
-        // transfer deposit
-        // update Agreement
-        // emit WithdrawDeposit
+        Agreement storage agreement = agreements[agreementId];
+
+        // transfer USDC to lender
+        address lender = agreement.lender;
+        uint256 futureValue = agreement.futureValue;
+        usdcToken.approve(lender, futureValue);
+        TransferHelper.safeTransferFrom(
+            address(usdcToken),
+            address(this),
+            lender,
+            futureValue
+        );
+
+        emit WithdrawDeposit(agreementId, lender, futureValue);
     }
 
     function withdrawCollateral(uint256 agreementId, uint256 amount)
@@ -131,8 +190,9 @@ contract Annuity is IAnnuity, Liquidator {
             (agreements[agreementId].collateral - amount)
         )
     {
-        // transfer collateral
-        // update Agreement
-        // emit WithdrawCollateral
+        Agreement storage agreement = agreements[agreementId];
+        wethToken.withdraw(amount);
+        agreement.collateral -= amount;
+        TransferHelper.safeTransferETH(agreement.borrower, amount);
     }
 }
