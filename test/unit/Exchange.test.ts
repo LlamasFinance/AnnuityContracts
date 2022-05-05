@@ -1,5 +1,6 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
+import { BigNumber } from "ethers";
 import { ethers } from "hardhat";
 import { MockV3Aggregator } from "../../typechain";
 import { Exchange } from "../../typechain/Exchange";
@@ -96,9 +97,24 @@ describe("Exchange", function () {
       const event = await exchange.queryFilter(filter);
       expect(event[0].args.amount).to.equal(lenderTokensAmt);
     });
+
+    describe("Agreement being activated", async () => {
+      this.beforeEach(async function () {
+        // Activate an agreement
+      });
+
+      it("Should convert ETH to USDC correctly", async () => {
+        const oneThousandEth = await exchange.getEthValue(lenderTokensAmt);
+        expect(Number(toETH(oneThousandEth))).to.equal(3000 * 1000);
+      });
+    });
   });
 });
 
 const toWEI = (amount: number | string) => {
   return ethers.utils.parseUnits(amount.toString(), 18);
+};
+
+const toETH = (amount: number | string | BigNumber) => {
+  return ethers.utils.formatUnits(amount.toString(), 18);
 };

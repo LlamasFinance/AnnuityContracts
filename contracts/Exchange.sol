@@ -109,6 +109,20 @@ contract Exchange is ReentrancyGuard, Ownable {
         emit Propose(msg.sender, id, amount);
     }
 
+    function activate(uint256 id, uint256 amount)
+        external
+        payable
+        nonReentrant
+        moreThanZero(msg.value)
+    {}
+
+    function getEthValue(uint256 amount) public view returns (uint256) {
+        (, int256 price, , , ) = s_priceFeed.latestRoundData();
+        // price has 8 decimals
+        // price will be something like 300000000000
+        return (uint256(price) * amount) * (10**(18 - 8));
+    }
+
     /********************/
     /* Modifiers */
     /********************/
