@@ -20,6 +20,7 @@ contract AgreementStorage {
         uint256 deposit;
         uint256 collateral;
         uint256 repaidAmt;
+        uint256 totalPayBackAmountWithInterest;
         uint256 start;
         uint256 duration;
         uint256 rate;
@@ -29,6 +30,8 @@ contract AgreementStorage {
     }
 
     mapping(uint256 => Agreement) public agreements;
+    //mapping to check whether borrower has withdrawn his complete collateral or not
+    mapping(uint => bool) public totalCollateralWithdrawn;
     uint256 public numAgreements;
 
     // temporary addresses, these will later be set in constructor.

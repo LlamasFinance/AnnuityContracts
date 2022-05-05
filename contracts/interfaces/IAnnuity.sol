@@ -23,8 +23,13 @@ interface IAnnuity {
 
     function withdrawDeposit(uint256 agreementId) external;
 
-    function withdrawCollateral(uint256 agreementId, uint256 amount) external;
+    function withdrawCollateralBeforeTotalRepay(
+        uint256 agreementId,
+        uint256 amount
+    ) external;
 
-    // events
-    event CreateAgreement(uint256 indexed id, address indexed lender);
+    function withdrawCollateralAfterTotalRepay(
+        uint256 agreementId
+    ) external;
+
 }

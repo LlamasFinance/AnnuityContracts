@@ -26,6 +26,17 @@ export interface AnnuityStruct {
 // 10 years or 315360000 seconds
 // 60 * [1+(0.05 * 10)] = $90,000 payout
 
+/*
+
+  deposit * (1+((rate/100)*time));
+
+ ( deposit/100)* [ 100+(rate*time) ]
+
+ 
+
+
+
+*/
 // 1.5x liquidation threshold
 // Borrower must maintain at least $135k
 // 50 eth collateral (assum $3k/eth)

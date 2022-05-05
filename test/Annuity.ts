@@ -1,46 +1,43 @@
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
+import { BigNumber } from "ethers";
 import { ethers } from "hardhat";
-import { Annuity, IERC20, USDC } from "../typechain";
-import { data } from "./Annuity.data";
 
-describe("Annuity", function () {
-  let annuity: Annuity;
-  let usdc: USDC;
-  let deployer: SignerWithAddress,
-    lender: SignerWithAddress,
-    borrower: SignerWithAddress;
-  beforeEach(async () => {
-    // set up accounts we'll be using.
-    [deployer, lender, borrower] = await ethers.getSigners();
-    // deploy mocks
-    let USDC = await ethers.getContractFactory("USDC");
-    // deployer has 500k usdc
-    usdc = await USDC.deploy(data.usdcMintAmt.toString());
-    // deploy contract
-    let Annuity = await ethers.getContractFactory("Annuity");
-    annuity = await Annuity.deploy(usdc.address);
-    await annuity.deployed();
-    console.log(annuity.address, deployer.address);
-  });
+describe("Annuity contract", function () {
+  it("should create a agreement", async function () {
+    const [owner, addr1, addr2] = await ethers.getSigners();
 
-  it("Should createAgreement()", async function () {
-    const { rate, duration, deposit } = data.annuityObj;
-    usdc.transfer(lender.address, deposit);
+    const USDCfactory = await ethers.getContractFactory("USDC");
+    const USDCtoken = await USDCfactory.deploy(BigNumber.from((1000000 * 10 ** 6).toString()));
+    await USDCtoken.deployed();
+    await USDCtoken.transfer(addr1.address,BigNumber.from(`${100000 * 10 ** 6}`));
+    await USDCtoken.transfer(addr2.address,BigNumber.from(`${200000 * 10 ** 6}`) );
 
-    // creating an agreement should return an agreement id of 1
-    usdc.connect(lender).approve(annuity.address, deposit);
-    const tx = await annuity
-      .connect(lender)
-      .createAgreement(rate, duration, deposit);
-    const receipt = await tx.wait();
-    // use emitted event to double check that id is correct
-    const id = receipt.events?.filter((x) => {
-      return x.event == "CreateAgreement";
-    })[0].args?.id;
+    const annuityFactory = await ethers.getContractFactory("Annuity");
+    const AnnuityContract = await annuityFactory.deploy(USDCtoken.address);
+
+    await AnnuityContract.deployed();
+    console.log(
+      "USDC address :- " +
+        USDCtoken.address +
+        "   AnnuityContract address :- " +
+        AnnuityContract.address
+    );
+     let tx1= await USDCtoken.connect(owner).approve(AnnuityContract.address, BigNumber.from(`${100000 * 10 ** 6}`));
+     let temp1=await tx1.wait();
+      tx1 = await AnnuityContract.connect(owner).createAgreement(
+      10,
+      315360000,
+     BigNumber.from(`${100000 * 10 ** 6}`)
+    );
+     temp1 = await tx1.wait();
+    console.log(tx1, temp1);
+    
+   let tx2=await AnnuityContract.connect(addr1).borrow(1,ethers.utils.parseEther("200.0"));
+    let temp2=await tx2.wait();
+
+   const id= temp2.events?.filter((x)=>{
+        return x.event==="BorrowedAgreement";
+    })[0].args?.agreementId;
     expect(id).to.equal(1);
-
-    // numAgreements should equal 1
-    expect(await annuity.numAgreements()).to.equal(1);
   });
 });
