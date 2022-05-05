@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.0;
+pragma solidity ^0.8.0;
 
-import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV2V3Interface.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
 
 /**
  * @title MockV3Aggregator
@@ -23,7 +23,7 @@ contract MockV3Aggregator is AggregatorV2V3Interface {
     mapping(uint256 => uint256) public override getTimestamp;
     mapping(uint256 => uint256) private getStartedAt;
 
-    constructor(uint8 _decimals, int256 _initialAnswer) public {
+    constructor(uint8 _decimals, int256 _initialAnswer)  {
         decimals = _decimals;
         updateAnswer(_initialAnswer);
     }
@@ -94,7 +94,7 @@ contract MockV3Aggregator is AggregatorV2V3Interface {
     }
 
     function description() external view override returns (string memory) {
-        return "v0.6/tests/MockV3Aggregator.sol";
+        return "v0.8/tests/MockV3Aggregator.sol";
     }
 }
 

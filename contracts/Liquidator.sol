@@ -1,6 +1,7 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
+import "hardhat/console.sol";
 import "./interfaces/ILiquidator.sol";
 import "./AgreementStorage.sol";
 import "./PriceConsumer.sol";
@@ -20,6 +21,8 @@ contract Liquidator is
     Swapper,
     AgreementStorage
 {
+    constructor(address _a) PriceConsumer(_a) {}
+
     uint256 public constant REQUIRED_RATIO = 15;
 
     function getUndercollateralizedAgreements()
@@ -80,7 +83,7 @@ contract Liquidator is
         virtual
         returns (bool)
     {
-         require(collateralAmt>0,"collateralAmt cannot be zero");
+        require(collateralAmt > 0, "collateralAmt cannot be zero");
         bool isEnough = false;
 
         // get price of ETH in USDC using chainlink price feed
@@ -90,7 +93,8 @@ contract Liquidator is
         uint256 totalPrice = price * collateralAmt;
 
         //agreements[id].totalPayBackAmountWithInterest is already elevated by 6(USDC ERC20 contract has 6 decimal) so we multiply it by 1e20 to elevate it by 26 and then compare it with totalPrice
-        uint256 _totalPayBackAmountWithInterest = agreements[agreementId].totalPayBackAmountWithInterest * 1e20;
+        uint256 _totalPayBackAmountWithInterest = agreements[agreementId]
+            .totalPayBackAmountWithInterest * 1e20;
 
         if (totalPrice > ((3 * _totalPayBackAmountWithInterest) / 2)) {
             isEnough = true;

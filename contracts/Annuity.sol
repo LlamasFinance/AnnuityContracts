@@ -1,12 +1,3 @@
-/*
-Doubts to ask to colin -->>
-    1.Reason for using TransferHelper.safeTransferFrom? => When we use TransferHelper.safeTransferFrom the user has to approove the Annuity contract with the funds(USDC) first...Instead if we use delegateCall we dont need to do that.
-    2.In functions borrow() , addToCollateral() and withdrawCollateralAfterTotalRepay() whats the use of amount parameter?...in these func the borrower is essentially paying eth(in form of wei) as collateral , so we can directly use msg.value to check how eth the borrwer has paid and if it is enough as collateral.
-    3. When do a agreement closes(agreement.status=Status.Closed)? Is it when the lender withdraw his funds(with interest) back or Is it when the borrower withdraw all his collateral after replaying the total debt(with interest)?
-
-
-*/
-
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
@@ -16,16 +7,8 @@ import "./Liquidator.sol";
 import "./Swapper.sol";
 import "hardhat/console.sol";
 
-/**
- * @title Annuity
- * @author Team
- * @notice It defines the Annuity contract
- **/
-
-// Agreement Storage --> (Swapper, PriceConsumer) --> Liquidator --> Annuity
-
 contract Annuity is IAnnuity, Liquidator {
-    address owner;
+    address public owner;
     //USDC contract object
     IERC20 private usdcToken;
 
@@ -46,11 +29,10 @@ contract Annuity is IAnnuity, Liquidator {
 
     // TODO pass addresses through constructor for real deployments
 
-    constructor(address usdc) {
+    constructor(address usdc, address mockPriceFeed) Liquidator(mockPriceFeed) {
         Swapper.swapRouter = ISwapRouter(AgreementStorage._swapRouter);
         Swapper.WETH9 = AgreementStorage._WETH9;
         Swapper.USDC = usdc;
-        PriceConsumer.priceFeedAddr = usdc;
         usdcToken = IERC20(usdc);
         owner = msg.sender;
     }
@@ -60,10 +42,9 @@ contract Annuity is IAnnuity, Liquidator {
         uint256 _duration,
         uint256 _deposit
     ) public override returns (uint256 agreementId) {
-        //minimum deposit a lender can lend--> 1000USDC
         require(
             _deposit >= 3154000000,
-            "Cant deposit funds lesser than 3154000000 USDC"
+            "Cant deposit funds lesser than 3154 USDC"
         );
         /// create Agreement
         uint256 totalSecInYear = 31536000;
@@ -87,7 +68,6 @@ contract Annuity is IAnnuity, Liquidator {
 
         // increment agreement count to use as id for mapping
         numAgreements++;
-        console.log("num agreements ", numAgreements);
         agreements[numAgreements] = newAgreement;
 
         // transfer lender's usdc to this contract
@@ -107,8 +87,6 @@ contract Annuity is IAnnuity, Liquidator {
             address(this),
             _deposit
         );
-
-        // require(success, "Transfer of USDC token failed");
 
         // emit event and return id
         emit CreateAgreement(numAgreements, msg.sender);
@@ -149,8 +127,8 @@ contract Annuity is IAnnuity, Liquidator {
         onlyIfActive(agreementId)
     {
         require(amount == msg.value, "Amount is not equal to msg.value");
-        // transfer collateral amount
-        // update Agreement
+
+        //transfer collateral amount && update Agreement
         Agreement storage agreement = agreements[agreementId];
         agreement.collateral += amount;
 
@@ -258,11 +236,6 @@ contract Annuity is IAnnuity, Liquidator {
             "total collateral of this agrreement is already withdrawn"
         );
 
-        // //check If borrower repaid the totalPayBackAmountWithInterest then transfer all the collateral
-        // require(
-        //     agreement.repaidAmt == agreement.totalPayBackAmountWithInterest,
-        //     "Agreement not repaid fully"
-        // );
         // set the mapping to true
         totalCollateralWithdrawn[agreementId] = true;
         uint256 totalCollateral = agreement.collateral;
