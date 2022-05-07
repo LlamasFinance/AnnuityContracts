@@ -29,6 +29,7 @@ struct Agreement {
 
 error TransferFailed();
 error NeedsMoreThanZero();
+error NeedsToBeActive();
 
 contract Exchange is ReentrancyGuard, Ownable {
     mapping(uint256 => Agreement) public s_idToAgreement;
@@ -126,8 +127,23 @@ contract Exchange is ReentrancyGuard, Ownable {
             msg.sender,
             proposedAgreement.deposit
         );
+
         if (!success) revert TransferFailed();
         emit Activate(msg.sender, id, amount);
+    }
+
+    function addCollateral(uint256 id, uint256 amount)
+        external
+        payable
+        nonReentrant
+        onlyIfActive(id)
+        moreThanZero(amount)
+    {
+        require(msg.value == amount, "ETH != amount");
+        Agreement storage activeAgreement = s_idToAgreement[id];
+
+        activeAgreement.collateral += amount;
+        emit AddCollateral(activeAgreement.borrower, id, amount);
     }
 
     function getMinReqCollateral(uint256 id) public view returns (uint256) {
@@ -162,6 +178,13 @@ contract Exchange is ReentrancyGuard, Ownable {
     modifier moreThanZero(uint256 amount) {
         if (amount == 0) {
             revert NeedsMoreThanZero();
+        }
+        _;
+    }
+
+    modifier onlyIfActive(uint256 id) {
+        if (s_idToAgreement[id].status != Status.Active) {
+            revert NeedsToBeActive();
         }
         _;
     }

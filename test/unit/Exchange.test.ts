@@ -1,37 +1,88 @@
+import { isBigNumberish } from "@ethersproject/bignumber/lib/bignumber";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
-import { BigNumber } from "ethers";
+import { BigNumber, BigNumberish } from "ethers";
 import { ethers } from "hardhat";
 import { MockV3Aggregator } from "../../typechain";
 import { Exchange } from "../../typechain/Exchange";
 import { MockERC20 } from "../../typechain/MockERC20";
 
-const params = {
+// Data
+const constants = {
   ethDecimals: 18,
   tokenDecimals: 6,
   pricefeedDecimals: 8,
-  deposit: 1000, // usdc
-  collateral: 1200, // eth
   ethUsdcValue: 3000,
   liquidationThreshold: 80,
 };
 
+// Utils
+
 const toWEI = (amount: number | string | BigNumber) => {
-  return ethers.utils.parseUnits(amount.toString(), params.ethDecimals);
+  return ethers.utils.parseUnits(amount.toString(), constants.ethDecimals);
 };
 
 const toUSDC = (amount: number | string | BigNumber) => {
-  return ethers.utils.parseUnits(amount.toString(), params.tokenDecimals);
+  return ethers.utils.parseUnits(amount.toString(), constants.tokenDecimals);
 };
 
 const toETH = (amount: number | string | BigNumber) => {
-  return ethers.utils.formatUnits(amount.toString(), params.ethDecimals);
+  return ethers.utils.formatUnits(amount.toString(), constants.ethDecimals);
 };
 
 const toPriceFeed = (amount: number | string | BigNumber) => {
-  return ethers.utils.parseUnits(amount.toString(), params.pricefeedDecimals);
+  return ethers.utils.parseUnits(
+    amount.toString(),
+    constants.pricefeedDecimals
+  );
 };
 
+const calcFutureValue = (
+  deposit: number,
+  rate: number,
+  duration: number
+): number => {
+  return deposit * (1 + rate / 1000) * duration;
+};
+
+const calcReqCollateral = (futureValue: number): number => {
+  const { liquidationThreshold, ethUsdcValue } = constants;
+  // ((200-80)*$1000)/$3000/ETH = (1200/3000) ETH
+  return ((200 - liquidationThreshold) * futureValue) / (ethUsdcValue * 100);
+};
+
+// Deploy Functions
+
+const deployExchange = async () => {
+  const Exchange = await ethers.getContractFactory("Exchange");
+  let exchange = await Exchange.deploy();
+  await exchange.deployed();
+  return exchange;
+};
+
+const deployMockUSDC = async () => {
+  const MockUSDC = await ethers.getContractFactory("MockERC20");
+  let mockUSDC = await MockUSDC.deploy(
+    "USD Coin",
+    "USD",
+    constants.tokenDecimals
+  );
+  await mockUSDC.deployed();
+  return mockUSDC;
+};
+
+const deployMockAggregator = async () => {
+  const MockV3Aggregator = await ethers.getContractFactory("MockV3Aggregator");
+
+  let mockAggregator = await MockV3Aggregator.deploy(
+    constants.pricefeedDecimals,
+    toPriceFeed(constants.ethUsdcValue)
+  );
+  await mockAggregator.deployed();
+  return mockAggregator;
+};
+
+// Interactions
 describe("Exchange", function () {
   let exchange: Exchange;
   let mockUSDC: MockERC20;
@@ -39,64 +90,70 @@ describe("Exchange", function () {
   let deployer: SignerWithAddress;
   let lender: SignerWithAddress;
   let borrower: SignerWithAddress;
-  const lenderTokensAmt = toUSDC(params.deposit);
 
-  beforeEach(async function () {
+  interface agreementArgs {
+    deposit?: number;
+    lenderTokens?: BigNumber;
+    duration?: number;
+    rate?: number;
+    collateral?: number;
+    collateralTokens?: BigNumber;
+    addedCollateralTokens?: BigNumber;
+    agreementID?: number;
+  }
+  let args: agreementArgs = {};
+  args = { deposit: 1000, lenderTokens: toUSDC(1000), duration: 1, rate: 50 };
+  args.collateral = calcReqCollateral(
+    calcFutureValue(args.deposit!, args.rate!, args.duration!)
+  );
+  args.collateralTokens = toWEI(args.collateral!).add(1);
+  args.addedCollateralTokens = toWEI(1);
+
+  //   SETUP
+  this.beforeEach(async function () {
     [deployer, lender, borrower] = await ethers.getSigners();
     // Exchange
-    const Exchange = await ethers.getContractFactory("Exchange");
-    exchange = await Exchange.deploy();
-    await exchange.deployed();
+    exchange = await deployExchange();
     // USDC
-    const MockUSDC = await ethers.getContractFactory("MockERC20");
-    mockUSDC = await MockUSDC.deploy("USD Coin", "USD", params.tokenDecimals);
-    await mockUSDC.deployed();
+    mockUSDC = await deployMockUSDC();
     // PriceFeeds
-    const MockV3Aggregator = await ethers.getContractFactory(
-      "MockV3Aggregator"
-    );
-
-    mockAggregator = await MockV3Aggregator.deploy(
-      params.pricefeedDecimals,
-      toPriceFeed(params.ethUsdcValue)
-    );
-    await mockAggregator.deployed();
-    console.log(
-      "Exchange address : %s\nUSDC address : %s\nAggregator address : %s\n",
-      exchange.address,
-      mockUSDC.address,
-      mockAggregator.address
-    );
+    mockAggregator = await deployMockAggregator();
     // Initialize
     exchange.setLenderToken(mockUSDC.address, mockAggregator.address);
-    mockUSDC.transfer(lender.address, lenderTokensAmt);
   });
 
   it("should initilize correctly", async function () {
     expect(await exchange.owner()).to.equal(deployer.address);
     expect(await exchange.s_lenderToken()).to.equal(mockUSDC.address);
     expect(await exchange.s_priceFeed()).to.equal(mockAggregator.address);
-    expect(await mockUSDC.balanceOf(lender.address)).to.equal(lenderTokensAmt);
+    console.log(
+      "Exchange address : %s\nUSDC address : %s\nAggregator address : %s\n",
+      exchange.address,
+      mockUSDC.address,
+      mockAggregator.address
+    );
   });
 
-  describe("Agreement being proposed", async () => {
-    let agreementID: number;
-    const args = {
-      amount: lenderTokensAmt,
-      duration: 1,
-      rate: 50,
-    };
+  //   PROPOSE AGREEMENT
+  const proposeAgreement = async () => {
+    const { lenderTokens, duration, rate } = args;
+    mockUSDC.transfer(lender.address, lenderTokens!);
+    await mockUSDC.connect(lender).approve(exchange.address, lenderTokens!);
+    const tx = await exchange
+      .connect(lender)
+      .propose(lenderTokens!, duration!, rate!);
+    const receipt = await tx.wait();
+    const agreementID = receipt.events?.filter((x) => {
+      return x.event == "Propose";
+    })[0].args?.id;
+    return agreementID;
+  };
 
-    beforeEach(async () => {
-      // Calls the propose() function
-      await mockUSDC.connect(lender).approve(exchange.address, lenderTokensAmt);
-      const tx = await exchange
-        .connect(lender)
-        .propose(args.amount, args.duration, args.rate);
-      const receipt = await tx.wait();
-      agreementID = receipt.events?.filter((x) => {
-        return x.event == "Propose";
-      })[0].args?.id;
+  describe("Agreement being proposed", async () => {
+    let { lenderTokens, duration, rate, agreementID } = args;
+
+    this.beforeEach(async () => {
+      agreementID = await proposeAgreement();
     });
 
     it("Should have the correct id", async () => {
@@ -104,66 +161,71 @@ describe("Exchange", function () {
     });
 
     it("Should store a new and correct agreement", async () => {
-      const agreement = await exchange.s_idToAgreement(agreementID);
+      const agreement = await exchange.s_idToAgreement(agreementID!);
       expect(agreement.lender).to.equal(lender.address);
+      // ((1000+50)*1)/1000 = 1050
       expect(agreement.futureValue).to.equal(
-        lenderTokensAmt.mul((1000 + args.rate) * args.duration).div(1000)
+        lenderTokens!.mul((1000 + rate!) * duration!).div(1000)
       );
     });
 
     it("Should emit a Propose event", async () => {
       const filter = exchange.filters.Propose(lender.address, agreementID);
       const event = await exchange.queryFilter(filter);
-      expect(event[0].args.amount).to.equal(lenderTokensAmt);
+      expect(event[0].args.amount).to.equal(lenderTokens);
+    });
+  });
+
+  // ACTIVATE AGREEMENT
+  const activateAgreement = async (agreementID: number) => {
+    const { collateralTokens } = args;
+    await exchange.connect(borrower).activate(agreementID, collateralTokens!, {
+      value: collateralTokens!,
+    });
+  };
+  describe("Agreement being activated", async () => {
+    let { lenderTokens, collateral, deposit, agreementID } = args;
+
+    this.beforeEach(async () => {
+      agreementID = await proposeAgreement();
+      await activateAgreement(agreementID!);
     });
 
-    describe("Agreement being activated", async () => {
-      const collateralWEI = toWEI(params.collateral);
+    it("Should activate the agreement correctly", async () => {
+      expect((await exchange.s_idToAgreement(agreementID!)).status).to.equal(1);
+      expect(await mockUSDC.balanceOf(borrower.address)).to.equal(lenderTokens);
+    });
 
-      this.beforeEach(async function () {
-        // Activate an agreement
-      });
+    it("Should convert USDC to ETH correctly", async () => {
+      const weiAmount = await exchange.getEthValueFromToken(lenderTokens!);
+      expect(weiAmount).to.equal(toWEI(deposit!).div(constants.ethUsdcValue));
+    });
 
-      it("Should convert USDC to ETH correctly", async () => {
-        const weiAmount = await exchange.getEthValueFromToken(lenderTokensAmt);
-        expect(weiAmount).to.equal(
-          toWEI(params.deposit).div(params.ethUsdcValue)
-        );
-      });
+    it("Should calculate minimum required collateral correctly", async () => {
+      const minReqCollateral = await exchange.getMinReqCollateral(agreementID!);
+      expect(minReqCollateral).to.equal(toWEI(collateral!));
+    });
+  });
 
-      const futureValue =
-        params.deposit * (1 + args.rate / 1000) * args.duration;
-      const calcReqCollateral = toWEI(
-        ((200 - params.liquidationThreshold) * futureValue) /
-          (params.ethUsdcValue * 100)
-      );
+  //   AGREEMENT STATUS = ACTIVE
+  describe("Methods while agreement is in status = Active", async function () {
+    let { collateralTokens, addedCollateralTokens, rate, agreementID } = args;
+    this.beforeEach(async () => {
+      agreementID = await proposeAgreement();
+      await activateAgreement(agreementID!);
+    });
 
-      it("Should calculate minimum required collateral correctly", async () => {
-        const minReqCollateral = await exchange.getMinReqCollateral(
-          agreementID
-        );
-        expect(minReqCollateral).to.equal(calcReqCollateral);
-      });
-
-      it("Should activate the agreement correctly", async () => {
-        await exchange
-          .connect(borrower)
-          .activate(agreementID, calcReqCollateral.add(1), {
-            value: calcReqCollateral.add(1),
-          });
-        expect((await exchange.s_idToAgreement(agreementID)).status).to.equal(
-          1
-        );
-        expect(await mockUSDC.balanceOf(borrower.address)).to.equal(
-          lenderTokensAmt
-        );
-      });
-
-      describe("Methods while agreement is in status = Active", async function () {
-        it("Should let the borrower add more collateral", async () => {
-          //...
+    it("Should let the borrower add more collateral", async () => {
+      await exchange
+        .connect(borrower)
+        .addCollateral(agreementID!, addedCollateralTokens!, {
+          value: addedCollateralTokens!,
         });
-      });
+      expect(
+        (await exchange.s_idToAgreement(agreementID!)).collateral
+      ).to.equal(collateralTokens!.add(addedCollateralTokens!));
     });
+
+    it("Should let the borrower repay part of the loan", async () => {});
   });
 });
