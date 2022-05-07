@@ -53,8 +53,10 @@ contract Annuity is IAnnuity, Liquidator {
             (100 * totalSecInYear)) *
             (100 * totalSecInYear + (_rate * _duration));
 
+        uint256 updatedDeposit = _deposit - (_deposit % 3154);
+
         Agreement memory newAgreement = Agreement({
-            deposit: _deposit,
+            deposit: updatedDeposit,
             collateral: 0,
             repaidAmt: 0,
             totalPayBackAmountWithInterest: _totalPayBackAmountWithInterest,
@@ -85,7 +87,7 @@ contract Annuity is IAnnuity, Liquidator {
             address(usdcToken),
             msg.sender,
             address(this),
-            _deposit
+            updatedDeposit
         );
 
         // emit event and return id
@@ -159,7 +161,11 @@ contract Annuity is IAnnuity, Liquidator {
         if (agreement.repaidAmt == totalPayBackAmountWithInterest) {
             agreement.status = Status.Repaid;
         }
-
+        // console.log("From contract");
+        // console.log("amount:-");
+        // console.log(amount);
+        // console.log("totalPayBackAmountWithInterest:-");
+        // console.log(amount);
         // transfer usdc amount
         TransferHelper.safeTransferFrom(
             address(usdcToken),
@@ -186,6 +192,7 @@ contract Annuity is IAnnuity, Liquidator {
             msg.sender,
             totalPayBackAmountWithInterest
         );
+        console.log(totalPayBackAmountWithInterest);
         require(success, "Transfer of USDC failded");
         // emit WithdrawDeposit
         emit WithdrawDeposit(agreementId, totalPayBackAmountWithInterest);

@@ -32,7 +32,7 @@ contract AgreementStorage {
     mapping(uint256 => Agreement) public agreements;
     //mapping to check whether borrower has withdrawn his complete collateral or not
     mapping(uint => bool) public totalCollateralWithdrawn;
-    uint256 public numAgreements;
+    uint256 public numAgreements=0;
 
     // temporary addresses, these will later be set in constructor.
     address public constant _WETH9 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
