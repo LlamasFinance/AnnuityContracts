@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "hardhat/console.sol";
 
 enum Status {
@@ -34,7 +34,7 @@ contract Exchange is ReentrancyGuard, Ownable {
     mapping(uint256 => Agreement) public s_idToAgreement;
     mapping(address => uint256[]) public s_accountToIDs;
     uint256 public s_numIDs;
-    IERC20 public s_lenderToken;
+    IERC20Metadata public s_lenderToken;
     AggregatorV3Interface public s_priceFeed;
 
     // At 80% Loan to Value Ratio, the loan can be liquidated
@@ -82,7 +82,7 @@ contract Exchange is ReentrancyGuard, Ownable {
         uint256 duration,
         uint256 rate
     ) external nonReentrant moreThanZero(amount) returns (uint256 id) {
-        uint256 futureValue = (amount * (100 + rate) * duration) / 100;
+        uint256 futureValue = (amount * (1000 + rate) * duration) / 1000;
         Agreement memory newAgreement = Agreement({
             deposit: amount,
             collateral: 0,
@@ -114,13 +114,46 @@ contract Exchange is ReentrancyGuard, Ownable {
         payable
         nonReentrant
         moreThanZero(msg.value)
-    {}
+    {
+        require(msg.value == amount, "ETH != amount");
+        require(amount > getMinReqCollateral(id), "Not enough collateral");
+        Agreement storage proposedAgreement = s_idToAgreement[id];
+        proposedAgreement.start = block.timestamp;
+        proposedAgreement.borrower = payable(msg.sender);
+        proposedAgreement.status = Status.Active;
+        proposedAgreement.collateral = amount;
+        bool success = s_lenderToken.transfer(
+            msg.sender,
+            proposedAgreement.deposit
+        );
+        if (!success) revert TransferFailed();
+        emit Activate(msg.sender, id, amount);
+    }
 
-    function getEthValue(uint256 amount) public view returns (uint256) {
+    function getMinReqCollateral(uint256 id) public view returns (uint256) {
+        Agreement memory agreement = s_idToAgreement[id];
+        uint256 minInETH = (getEthValueFromToken(agreement.futureValue) *
+            (200 - LIQUIDATION_THRESHOLD)) / 100;
+        return minInETH;
+    }
+
+    function getEthValueFromToken(uint256 amount)
+        public
+        view
+        returns (uint256)
+    {
         (, int256 price, , , ) = s_priceFeed.latestRoundData();
+        uint8 priceFeedDecimals = s_priceFeed.decimals();
+        uint8 tokenDecimals = s_lenderToken.decimals();
         // price has 8 decimals
         // price will be something like 300000000000
-        return (uint256(price) * amount) * (10**(18 - 8));
+        // amount will be something like (1000 * 10 ** 6 USDC)
+        // eth has 18 decimals
+        // amount * 10**(18-priceDecimals+tokenDecimals) / price
+        //  (3000*10**6) * 10**(18+8-6) / (3000 * 10**8) = 1 ETH
+        return
+            (amount * (10**(18 + priceFeedDecimals - tokenDecimals))) /
+            uint256(price);
     }
 
     /********************/
@@ -140,7 +173,7 @@ contract Exchange is ReentrancyGuard, Ownable {
         external
         onlyOwner
     {
-        s_lenderToken = IERC20(token);
+        s_lenderToken = IERC20Metadata(token);
         s_priceFeed = AggregatorV3Interface(priceFeed);
     }
 }
