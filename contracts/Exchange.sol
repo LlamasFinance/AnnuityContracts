@@ -30,6 +30,8 @@ struct Agreement {
 error TransferFailed();
 error NeedsMoreThanZero();
 error NeedsToBeActive();
+error NeedsToBeLender();
+error NeedsToBeBorrower();
 
 contract Exchange is ReentrancyGuard, Ownable {
     mapping(uint256 => Agreement) public s_idToAgreement;
@@ -146,12 +148,87 @@ contract Exchange is ReentrancyGuard, Ownable {
         emit AddCollateral(activeAgreement.borrower, id, amount);
     }
 
+    function repay(uint256 id, uint256 amount)
+        external
+        nonReentrant
+        onlyIfActive(id)
+        moreThanZero(amount)
+    {
+        Agreement storage activeAgreement = s_idToAgreement[id];
+
+        // borrow cannot pay back more than the future value of the agreement
+        uint256 futureValue = activeAgreement.futureValue;
+        uint256 repaidAmt = activeAgreement.repaidAmt;
+        if (repaidAmt + amount > futureValue) {
+            amount = futureValue - repaidAmt;
+        }
+
+        activeAgreement.repaidAmt += amount;
+        if (activeAgreement.repaidAmt == futureValue) {
+            activeAgreement.status = Status.Repaid;
+            emit Repaid(activeAgreement.lender, id, futureValue);
+        }
+        bool success = s_lenderToken.transferFrom(
+            msg.sender,
+            address(this),
+            amount
+        );
+        if (!success) revert TransferFailed();
+        emit Repay(activeAgreement.borrower, id, amount);
+    }
+
+    function withdrawCollateral(uint256 id, uint256 amount)
+        external
+        nonReentrant
+        onlyIfBorrower(id)
+        moreThanZero(amount)
+    {
+        Agreement storage agreement = s_idToAgreement[id];
+        Status status = agreement.status;
+        uint256 collateral = agreement.collateral;
+        uint256 reqCollateral = getMinReqCollateral(id);
+
+        if (status == Status.Active) {
+            require(
+                collateral - amount > reqCollateral,
+                "Not enough collateral"
+            );
+        } else {
+            require(
+                status == Status.Repaid || status == Status.Closed,
+                "Agreement not settled yet"
+            );
+        }
+
+        agreement.collateral -= amount;
+        bool success = (agreement.borrower).send(amount);
+        if (!success) revert TransferFailed();
+        emit WithdrawCollateral(agreement.borrower, id, amount);
+    }
+
+        function close(uint256 id)
+        external
+        nonReentrant
+        onlyIfLender(id)
+        onlyIfRepaid(id)
+    {
+        Agreement storage agreement = s_idToAgreement[id];
+        uint256 futureValue = agreement.futureValue;
+        assert(agreement.repaidAmt == futureValue);
+
+        bool success = s_lenderToken.transfer(agreement.lender, futureValue);
+        if (!success) revert TransferFailed();
+        emit Closed(agreement.lender, agreement.borrower, id);
+    }
+
     function getMinReqCollateral(uint256 id) public view returns (uint256) {
         Agreement memory agreement = s_idToAgreement[id];
         uint256 minInETH = (getEthValueFromToken(agreement.futureValue) *
             (200 - LIQUIDATION_THRESHOLD)) / 100;
         return minInETH;
     }
+
+
 
     function getEthValueFromToken(uint256 amount)
         public
@@ -185,6 +262,27 @@ contract Exchange is ReentrancyGuard, Ownable {
     modifier onlyIfActive(uint256 id) {
         if (s_idToAgreement[id].status != Status.Active) {
             revert NeedsToBeActive();
+        }
+        _;
+    }
+
+    modifier onlyIfRepaid(uint256 id) {
+        if (s_idToAgreement[id].status != Status.Repaid) {
+            revert NeedsToBeActive();
+        }
+        _;
+    }
+
+    modifier onlyIfLender(uint256 id) {
+        if (s_idToAgreement[id].lender != msg.sender) {
+            revert NeedsToBeLender();
+        }
+        _;
+    }
+
+    modifier onlyIfBorrower(uint256 id) {
+        if (s_idToAgreement[id].borrower != msg.sender) {
+            revert NeedsToBeBorrower();
         }
         _;
     }

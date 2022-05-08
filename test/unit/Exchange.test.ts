@@ -92,20 +92,20 @@ describe("Exchange", function () {
   let borrower: SignerWithAddress;
 
   interface agreementArgs {
+    agreementID?: number;
     deposit?: number;
     lenderTokens?: BigNumber;
     duration?: number;
     rate?: number;
+    futureValue?: number;
     collateral?: number;
     collateralTokens?: BigNumber;
     addedCollateralTokens?: BigNumber;
-    agreementID?: number;
   }
   let args: agreementArgs = {};
   args = { deposit: 1000, lenderTokens: toUSDC(1000), duration: 1, rate: 50 };
-  args.collateral = calcReqCollateral(
-    calcFutureValue(args.deposit!, args.rate!, args.duration!)
-  );
+  args.futureValue = calcFutureValue(args.deposit!, args.rate!, args.duration!);
+  args.collateral = calcReqCollateral(args.futureValue!);
   args.collateralTokens = toWEI(args.collateral!).add(1);
   args.addedCollateralTokens = toWEI(1);
 
@@ -193,7 +193,6 @@ describe("Exchange", function () {
 
     it("Should activate the agreement correctly", async () => {
       expect((await exchange.s_idToAgreement(agreementID!)).status).to.equal(1);
-      expect(await mockUSDC.balanceOf(borrower.address)).to.equal(lenderTokens);
     });
 
     it("Should convert USDC to ETH correctly", async () => {
@@ -209,10 +208,13 @@ describe("Exchange", function () {
 
   //   AGREEMENT STATUS = ACTIVE
   describe("Methods while agreement is in status = Active", async function () {
-    let { collateralTokens, addedCollateralTokens, rate, agreementID } = args;
+    let { collateralTokens, addedCollateralTokens, futureValue, agreementID } =
+      args;
+
     this.beforeEach(async () => {
       agreementID = await proposeAgreement();
       await activateAgreement(agreementID!);
+      await mockUSDC.transfer(borrower.address, toUSDC(futureValue!));
     });
 
     it("Should let the borrower add more collateral", async () => {
@@ -226,6 +228,61 @@ describe("Exchange", function () {
       ).to.equal(collateralTokens!.add(addedCollateralTokens!));
     });
 
-    it("Should let the borrower repay part of the loan", async () => {});
+    it("Should let the borrower withdraw some collateral", async () => {
+      const amount = toWEI(100);
+      await exchange
+        .connect(borrower)
+        .addCollateral(agreementID!, amount, { value: amount });
+      await exchange.connect(borrower).withdrawCollateral(agreementID!, amount);
+
+      const filter = exchange.filters.WithdrawCollateral(
+        borrower.address,
+        agreementID!
+      );
+      const event = await exchange.queryFilter(filter);
+      expect(event[0].args.amount).to.equal(amount);
+    });
+
+    it("Should let the borrower repay part of the loan", async () => {
+      let amount = toUSDC(futureValue!).div(2);
+      await mockUSDC.connect(borrower).approve(exchange.address, amount);
+      await exchange.connect(borrower).repay(agreementID!, amount);
+      expect((await exchange.s_idToAgreement(agreementID!)).repaidAmt).to.equal(
+        amount
+      );
+    });
+
+    it("Should let the borrower repay all of the loan", async () => {
+      await repayEntireLoan(agreementID!);
+      const agreement = await exchange.s_idToAgreement(agreementID!);
+      expect(agreement.repaidAmt).to.equal(toUSDC(futureValue!));
+      expect(agreement.status).to.equal(2);
+    });
+  });
+
+  // AGREEMENT STATUS = REPAID
+  const repayEntireLoan = async (agreementID: number) => {
+    const { futureValue } = args;
+    const amount = toUSDC(futureValue!);
+    await mockUSDC.transfer(borrower.address, amount);
+    await mockUSDC.connect(borrower).approve(exchange.address, amount);
+    await exchange.connect(borrower).repay(agreementID, amount);
+  };
+  describe("Methods while agreement status = Repaid", async () => {
+    let { futureValue, agreementID } =
+      args;
+
+    this.beforeEach(async () => {
+      agreementID = await proposeAgreement();
+      await activateAgreement(agreementID!);
+      await repayEntireLoan(agreementID!);
+    });
+
+    it("Should let the lender withdraw the future value", async () => {
+      let lenderBalance1 = await mockUSDC.balanceOf(lender.address);
+      await exchange.connect(lender).close(agreementID!);
+      let lenderBalance2 = await mockUSDC.balanceOf(lender.address);
+      expect(lenderBalance2.sub(lenderBalance1)).equals(toUSDC(futureValue!));
+    });
   });
 });
