@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "./Exchange.sol";
+import "./interfaces/IWETH.sol";
+import "./interfaces/IUniswapRouter.sol";
 import "hardhat/console.sol";
 
 error OnlyKeeperRegistry();
 
 contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
+    uint24 public constant POLL_FEE = 3000;
+    IUniswapRouter public s_swapRouter;
+    IWETH public s_wethToken;
     address public s_keeperRegistryAddress;
 
     function getLiquidatableAgreements()
@@ -46,11 +50,12 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
         uint256 futureValue = agreement.futureValue;
         uint256 minReqCollateral = getMinReqCollateral(id);
         uint256 actualCollateral = agreement.collateral;
-
+        console.log("time %s", block.timestamp - start);
         if (actualCollateral <= minReqCollateral) {
             return true;
         } else if (
-            block.timestamp - start > secPerYear && repaidAmt < futureValue
+            block.timestamp - start > (duration * secPerYear) &&
+            repaidAmt < futureValue
         ) {
             return true;
         } else {
@@ -94,6 +99,30 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
         liquidate(idsToLiquidate);
     }
 
+    function swapExactOutputSingle(
+        address payable spender,
+        address payable receiver,
+        uint256 amountOut,
+        uint256 amountInMaximum
+    ) private returns (uint256 amountIn) {
+        ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter
+            .ExactOutputSingleParams({
+                tokenIn: address(s_wethToken),
+                tokenOut: address(s_lenderToken),
+                fee: POLL_FEE,
+                recipient: receiver,
+                deadline: block.timestamp,
+                amountOut: amountOut,
+                amountInMaximum: amountInMaximum,
+                sqrtPriceLimitX96: 0
+            });
+        amountIn = s_swapRouter.exactOutputSingle{value: amountInMaximum}(
+            params
+        );
+        s_swapRouter.refundETH();
+        return amountIn;
+    }
+
     /********************/
     /* Modifiers */
     /********************/
@@ -113,5 +142,14 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
     {
         require(keeperRegistryAddress != address(0));
         s_keeperRegistryAddress = keeperRegistryAddress;
+    }
+
+    function setSwapRouter(address swapRouter, address wethToken)
+        external
+        onlyOwner
+    {
+        require(swapRouter != address(0));
+        s_swapRouter = IUniswapRouter(swapRouter);
+        s_wethToken = IWETH(wethToken);
     }
 }

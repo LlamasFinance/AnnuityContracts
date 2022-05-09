@@ -1,10 +1,11 @@
-import { isBigNumberish } from "@ethersproject/bignumber/lib/bignumber";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
-import { BigNumber, BigNumberish } from "ethers";
-import { ethers } from "hardhat";
-import { Exchange, MockERC20, MockV3Aggregator } from "../../typechain";
-import { LiquidatableExchange } from "../../typechain/LiquidatableExchange";
+import { ethers, network } from "hardhat";
+import {
+  LiquidatableExchange,
+  MockERC20,
+  MockV3Aggregator,
+} from "../../typechain";
 import {
   deployContract,
   constants,
@@ -14,6 +15,7 @@ import {
   args,
   toUSDC,
   proposeAgreement,
+  repayEntireLoan,
 } from "./utils";
 
 describe("LiquidatableExchange", async function () {
@@ -61,8 +63,8 @@ describe("LiquidatableExchange", async function () {
     );
   });
 
-  //   LIQUIDATIONS
-  describe("Liquidating Contracts", async function () {
+  //   KEEPERS
+  describe("Chainlink Keepers Functionality", async function () {
     let agreementID: number;
 
     this.beforeEach(async () => {
@@ -70,10 +72,25 @@ describe("LiquidatableExchange", async function () {
       await activateAgreement(liquidExchange, borrower, agreementID);
     });
 
-    it("Should liquidate", async () => {
+    it("Should return ids to liquidate if collateral value isn't enough", async () => {
       const { ethUsdcValue } = constants;
       const checkData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(""));
       await mockAggregator.updateAnswer(ethUsdcValue / 2);
+      const { upkeepNeeded, performData } =
+        await liquidExchange.callStatic.checkUpkeep(checkData);
+      const returnedIds = ethers.utils.defaultAbiCoder.decode(
+        ["uint[]"],
+        performData
+      )[0];
+      expect(upkeepNeeded).to.equal(true);
+      expect(returnedIds[0]).to.equal(agreementID);
+    });
+
+    it("Should return ids to liquidate if not repaid by expiration date", async () => {
+      const { secsPerYear } = constants;
+      const checkData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(""));
+      await network.provider.send("evm_increaseTime", [secsPerYear + 1]);
+      await network.provider.send("evm_mine");
       const { upkeepNeeded, performData } =
         await liquidExchange.callStatic.checkUpkeep(checkData);
       const returnedIds = ethers.utils.defaultAbiCoder.decode(

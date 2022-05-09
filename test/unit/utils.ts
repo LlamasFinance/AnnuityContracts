@@ -27,6 +27,7 @@ export const constants = {
   pricefeedDecimals: 8,
   ethUsdcValue: 3000,
   liquidationThreshold: 80,
+  secsPerYear: 31536000,
 };
 
 // UTILS
@@ -77,6 +78,13 @@ export const calcReqCollateral = (futureValue: number): number => {
   return ((200 - liquidationThreshold) * futureValue) / (ethUsdcValue * 100);
 };
 
+export const getTime = async () => {
+  const blockNumBefore = await ethers.provider.getBlockNumber();
+  const blockBefore = await ethers.provider.getBlock(blockNumBefore);
+  const timestamp = blockBefore.timestamp;
+  return timestamp;
+};
+
 // ARGUMENTS
 export interface agreementArgs {
   agreementID?: number;
@@ -111,7 +119,6 @@ export const proposeAgreement = async (
 ) => {
   const { lenderTokens, duration, rate } = args;
   await mockUSDC.transfer(lender.address, lenderTokens!);
-  console.log(await mockUSDC.balanceOf(lender.address));
   await mockUSDC.connect(lender).approve(exchange.address, lenderTokens!);
   const tx = await exchange
     .connect(lender)
