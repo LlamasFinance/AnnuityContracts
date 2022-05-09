@@ -12,7 +12,7 @@ contract MockERC20 is ERC20 {
         uint8 decimals
     ) ERC20(name, symbol) {
         _decimals = decimals;
-        _mint(msg.sender, 1000000 * 10**decimals);
+        _mint(msg.sender, 100000000 * 10**decimals);
     }
 
     function decimals() public view virtual override returns (uint8) {

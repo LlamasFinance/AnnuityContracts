@@ -23,7 +23,7 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
         for (uint256 id = 1; id <= s_numIDs; ++id) {
             needsLiquidation = isLiquidationRequired(id);
             if (needsLiquidation) {
-                ids[id] = id;
+                ids[id - 1] = id;
                 count++;
             }
         }
@@ -39,10 +39,19 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
 
     function isLiquidationRequired(uint256 id) public view returns (bool) {
         Agreement memory agreement = s_idToAgreement[id];
+        uint256 start = agreement.start;
+        uint256 duration = agreement.duration;
+        uint256 secPerYear = 31536000;
+        uint256 repaidAmt = agreement.repaidAmt;
+        uint256 futureValue = agreement.futureValue;
         uint256 minReqCollateral = getMinReqCollateral(id);
         uint256 actualCollateral = agreement.collateral;
 
         if (actualCollateral <= minReqCollateral) {
+            return true;
+        } else if (
+            block.timestamp - start > secPerYear && repaidAmt < futureValue
+        ) {
             return true;
         } else {
             return false;
