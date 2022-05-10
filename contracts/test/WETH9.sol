@@ -77,6 +77,10 @@ contract WETH9 {
 
         return true;
     }
+
+    function decimals() public view returns (uint8) {
+        return decimals;
+    }
 }
 
 /*

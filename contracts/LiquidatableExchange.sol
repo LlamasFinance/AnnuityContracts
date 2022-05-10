@@ -16,6 +16,8 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
     IWETH public s_wethToken;
     address public s_keeperRegistryAddress;
 
+    event Received(address sender, uint256 amount);
+
     function getLiquidatableAgreements()
         public
         view
@@ -50,7 +52,7 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
         uint256 futureValue = agreement.futureValue;
         uint256 minReqCollateral = getMinReqCollateral(id);
         uint256 actualCollateral = agreement.collateral;
-        console.log("time %s", block.timestamp - start);
+
         if (actualCollateral <= minReqCollateral) {
             return true;
         } else if (
@@ -70,10 +72,46 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
             agreement = s_idToAgreement[id];
             bool needsLiquidation = isLiquidationRequired(id);
             if (needsLiquidation) {
-                // call uniswap ... etc
-                // TODO
+                // amountOut we're swapping eth for
+                uint256 tokenNeeded = agreement.futureValue -
+                    agreement.repaidAmt;
+                // swap eth collateral for tokens, send tokens to this contract
+                uint256 spentETH = swapExactOutputSingle(
+                    payable(address(this)),
+                    tokenNeeded,
+                    agreement.collateral
+                );
+                // update agreement
+                agreement.status = Status.Repaid;
+                agreement.collateral -= spentETH;
+
+                emit Liquidate(agreement.borrower, agreement.collateral);
+                emit Repaid(agreement.lender, id, tokenNeeded);
             }
         }
+    }
+
+    function swapExactOutputSingle(
+        address payable receiver,
+        uint256 amountOut,
+        uint256 amountInMaximum
+    ) private returns (uint256 amountIn) {
+        IUniswapRouter.ExactOutputSingleParams memory params = IUniswapRouter
+            .ExactOutputSingleParams({
+                tokenIn: address(s_wethToken),
+                tokenOut: address(s_lenderToken),
+                fee: POLL_FEE,
+                recipient: receiver,
+                deadline: block.timestamp,
+                amountOut: amountOut,
+                amountInMaximum: amountInMaximum,
+                sqrtPriceLimitX96: 0
+            });
+        amountIn = s_swapRouter.exactOutputSingle{value: amountInMaximum}(
+            params
+        );
+        s_swapRouter.refundETH();
+        return amountIn;
     }
 
     function checkUpkeep(bytes calldata)
@@ -99,28 +137,8 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
         liquidate(idsToLiquidate);
     }
 
-    function swapExactOutputSingle(
-        address payable spender,
-        address payable receiver,
-        uint256 amountOut,
-        uint256 amountInMaximum
-    ) private returns (uint256 amountIn) {
-        ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter
-            .ExactOutputSingleParams({
-                tokenIn: address(s_wethToken),
-                tokenOut: address(s_lenderToken),
-                fee: POLL_FEE,
-                recipient: receiver,
-                deadline: block.timestamp,
-                amountOut: amountOut,
-                amountInMaximum: amountInMaximum,
-                sqrtPriceLimitX96: 0
-            });
-        amountIn = s_swapRouter.exactOutputSingle{value: amountInMaximum}(
-            params
-        );
-        s_swapRouter.refundETH();
-        return amountIn;
+    receive() external payable {
+        emit Received(msg.sender, msg.value);
     }
 
     /********************/

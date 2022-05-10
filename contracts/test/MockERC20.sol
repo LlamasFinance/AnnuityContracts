@@ -18,4 +18,8 @@ contract MockERC20 is ERC20 {
     function decimals() public view virtual override returns (uint8) {
         return _decimals;
     }
+
+    function mint(address account, uint256 amount) public {
+        _mint(account, amount);
+    }
 }
