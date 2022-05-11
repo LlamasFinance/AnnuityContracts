@@ -1,0 +1,9 @@
+[
+  "event AnswerUpdated(int256 indexed,uint256 indexed,uint256)",
+  "event NewRound(uint256 indexed,address indexed,uint256)",
+  "function getAnswer(uint256) view returns (int256)",
+  "function getTimestamp(uint256) view returns (uint256)",
+  "function latestAnswer() view returns (int256)",
+  "function latestRound() view returns (uint256)",
+  "function latestTimestamp() view returns (uint256)"
+]

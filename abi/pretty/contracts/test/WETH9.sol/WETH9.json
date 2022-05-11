@@ -1,0 +1,17 @@
+[
+  "function name() view returns (string)",
+  "function approve(address,uint256) returns (bool)",
+  "function totalSupply() view returns (uint256)",
+  "function transferFrom(address,address,uint256) returns (bool)",
+  "function withdraw(uint256)",
+  "function decimals() view returns (uint8)",
+  "function balanceOf(address) view returns (uint256)",
+  "function symbol() view returns (string)",
+  "function transfer(address,uint256) returns (bool)",
+  "function deposit() payable",
+  "function allowance(address,address) view returns (uint256)",
+  "event Approval(address indexed,address indexed,uint256)",
+  "event Transfer(address indexed,address indexed,uint256)",
+  "event Deposit(address indexed,uint256)",
+  "event Withdrawal(address indexed,uint256)"
+]
