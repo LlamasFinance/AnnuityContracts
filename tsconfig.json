@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "compilerOptions": {
         "target": "es2018",
         "module": "commonjs",
@@ -18,3 +19,16 @@
         "./hardhat.config.ts"
     ]
 }
+=======
+  "compilerOptions": {
+    "target": "es2018",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "outDir": "dist",
+    "declaration": true
+  },
+  "include": ["./scripts", "./test", "./typechain", "temp/index.ts", "temp/Annuity.ts", "temp/Annuity.data.ts", "test/Annuity.ts"],
+  "files": ["./hardhat.config.ts"]
+}
+>>>>>>> origin/main
