@@ -48,10 +48,17 @@ describe("LiquidatableExchange", async function () {
     // WEI
     mockWETH = (await deployContract("WETH9", deployer)) as WETH9;
     // Aggregator
-    mockAggregator = (await deployContract("MockV3Aggregator", deployer, [
-      pricefeedDecimals,
-      toPriceFeed(ethUsdcValue),
-    ])) as MockV3Aggregator;
+    if (network.name == "hardhat") {
+      mockAggregator = (await deployContract("MockV3Aggregator", deployer, [
+        pricefeedDecimals,
+        toPriceFeed(ethUsdcValue),
+      ])) as MockV3Aggregator;
+    } else if (network.name == "kovan") {
+      mockAggregator = await ethers.getContractAt(
+        "MockV3Aggregator",
+        "0x64EaC61A2DFda2c3Fa04eED49AA33D021AeC8838"
+      );
+    }
     // SwapRouter
     mockSwapRouter = (await deployContract(
       "MockSwapRouter",
@@ -89,7 +96,7 @@ describe("LiquidatableExchange", async function () {
     it("Should swap eth for usdc", async () => {
       const { ethUsdcValue } = constants;
       const weiIn = toWEI(1);
-      const usdcOut = toUSDC(ethUsdcValue / 2);
+      const desiredUsdcOut = toUSDC(ethUsdcValue / 2);
 
       const params = {
         tokenIn: mockWETH.address,
@@ -97,7 +104,7 @@ describe("LiquidatableExchange", async function () {
         fee: 0,
         recipient: lender.address,
         deadline: 0,
-        amountOut: usdcOut,
+        amountOut: desiredUsdcOut,
         amountInMaximum: weiIn,
         sqrtPriceLimitX96: 0,
       };
@@ -107,7 +114,7 @@ describe("LiquidatableExchange", async function () {
         .connect(lender)
         .exactOutputSingle(params, { value: weiIn });
       const usdcBalanceAfter = await mockUSDC.balanceOf(lender.address);
-      expect(usdcBalanceAfter.sub(usdcBalanceBefore)).to.equal(usdcOut);
+      expect(usdcBalanceAfter.sub(usdcBalanceBefore)).to.equal(desiredUsdcOut);
     });
   });
 
@@ -121,11 +128,8 @@ describe("LiquidatableExchange", async function () {
     });
 
     it("Should return ids to liquidate if collateral value isn't enough", async () => {
-      const { ethUsdcValue } = constants;
-      const checkData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(""));
-      await mockAggregator.updateAnswer(ethUsdcValue / 2);
       const { upkeepNeeded, performData } =
-        await liquidExchange.callStatic.checkUpkeep(checkData);
+        await liquidateBecauseOfCollateral();
       const returnedIds = ethers.utils.defaultAbiCoder.decode(
         ["uint[]"],
         performData
@@ -135,12 +139,7 @@ describe("LiquidatableExchange", async function () {
     });
 
     it("Should return ids to liquidate if not repaid by expiration date", async () => {
-      const { secsPerYear } = constants;
-      const checkData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(""));
-      await network.provider.send("evm_increaseTime", [secsPerYear + 1]);
-      await network.provider.send("evm_mine");
-      const { upkeepNeeded, performData } =
-        await liquidExchange.callStatic.checkUpkeep(checkData);
+      const { upkeepNeeded, performData } = await liquidateBecauseOfTime();
       const returnedIds = ethers.utils.defaultAbiCoder.decode(
         ["uint[]"],
         performData
@@ -159,34 +158,28 @@ describe("LiquidatableExchange", async function () {
       await activateAgreement(liquidExchange, borrower, agreementID);
     });
 
-    it("Should liquidate an agreement if collateral value isn't enough", async () => {
-      const { ethUsdcValue } = constants;
-      // since collateral is at the minRequired, subtraction 100 from the value of it will trigger liquidation
-      await mockAggregator.updateAnswer(toPriceFeed(ethUsdcValue - 100));
-      const checkData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(""));
+    it("Should fully liquidate an agreement if collateral value isn't enough", async () => {
       const { upkeepNeeded, performData } =
-        await liquidExchange.callStatic.checkUpkeep(checkData);
+        await liquidateBecauseOfCollateral();
       expect(upkeepNeeded).to.equal(true);
       await liquidExchange.performUpkeep(performData);
       const agreement = await liquidExchange.s_idToAgreement(agreementID);
 
+      // Status (enum) should be Repaid
       expect(agreement.status).to.equal(2);
 
+      // Any leftover eth from the liquidation should show in the agreement's collateral balance
       const collateralBorrowerGetsRefunded = agreement.collateral;
       const contractEthBalance = await waffle.provider.getBalance(
         liquidExchange.address
       );
 
+      //   The collateral amount should show more eth than the contract actually has
       expect(collateralBorrowerGetsRefunded).to.equal(contractEthBalance);
     });
 
     it("Should liquidate an agreement if the duration has passed", async () => {
-      const { secsPerYear } = constants;
-      const checkData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(""));
-      await network.provider.send("evm_increaseTime", [secsPerYear + 1]);
-      await network.provider.send("evm_mine");
-      const { upkeepNeeded, performData } =
-        await liquidExchange.callStatic.checkUpkeep(checkData);
+      const { upkeepNeeded, performData } = await liquidateBecauseOfTime();
       expect(upkeepNeeded).to.equal(true);
 
       await liquidExchange.performUpkeep(performData);
@@ -202,4 +195,25 @@ describe("LiquidatableExchange", async function () {
       expect(collateralBorrowerGetsRefunded).to.equal(contractEthBalance);
     });
   });
+
+  //   SHARED HELPER FUNCTIONS
+  const liquidateBecauseOfCollateral = async () => {
+    const { ethUsdcValue } = constants;
+    const checkData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(""));
+    // since collateral is at the minRequired, subtraction 2 from the value of it will trigger liquidation
+    await mockAggregator.updateAnswer(toPriceFeed(ethUsdcValue - 2));
+    const { upkeepNeeded, performData } =
+      await liquidExchange.callStatic.checkUpkeep(checkData);
+    return { upkeepNeeded, performData };
+  };
+
+  const liquidateBecauseOfTime = async () => {
+    const { secsPerYear } = constants;
+    const checkData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(""));
+    await network.provider.send("evm_increaseTime", [secsPerYear + 1]);
+    await network.provider.send("evm_mine");
+    const { upkeepNeeded, performData } =
+      await liquidExchange.callStatic.checkUpkeep(checkData);
+    return { upkeepNeeded, performData };
+  };
 });

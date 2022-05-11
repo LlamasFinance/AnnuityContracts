@@ -1,0 +1,14 @@
+[
+  "event AnswerUpdated(int256 indexed,uint256 indexed,uint256)",
+  "event NewRound(uint256 indexed,address indexed,uint256)",
+  "function decimals() view returns (uint8)",
+  "function description() view returns (string)",
+  "function getAnswer(uint256) view returns (int256)",
+  "function getRoundData(uint80) view returns (uint80, int256, uint256, uint256, uint80)",
+  "function getTimestamp(uint256) view returns (uint256)",
+  "function latestAnswer() view returns (int256)",
+  "function latestRound() view returns (uint256)",
+  "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)",
+  "function latestTimestamp() view returns (uint256)",
+  "function version() view returns (uint256)"
+]

@@ -16,8 +16,6 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
     IWETH public s_wethToken;
     address public s_keeperRegistryAddress;
 
-    event Received(address sender, uint256 amount);
-
     function getLiquidatableAgreements()
         public
         view
@@ -33,7 +31,7 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
                 count++;
             }
         }
-
+        // Reduce array size to actual needed size
         if (count != s_numIDs) {
             assembly {
                 mstore(ids, count)
@@ -72,7 +70,7 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
             agreement = s_idToAgreement[id];
             bool needsLiquidation = isLiquidationRequired(id);
             if (needsLiquidation) {
-                // amountOut we're swapping eth for
+                // desired amountOut we're swapping eth for
                 uint256 tokenNeeded = agreement.futureValue -
                     agreement.repaidAmt;
                 // swap eth collateral for tokens, send tokens to this contract
@@ -95,7 +93,7 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
         address payable receiver,
         uint256 amountOut,
         uint256 amountInMaximum
-    ) private returns (uint256 amountIn) {
+    ) private returns (uint256 amountUsed) {
         IUniswapRouter.ExactOutputSingleParams memory params = IUniswapRouter
             .ExactOutputSingleParams({
                 tokenIn: address(s_wethToken),
@@ -107,11 +105,11 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
                 amountInMaximum: amountInMaximum,
                 sqrtPriceLimitX96: 0
             });
-        amountIn = s_swapRouter.exactOutputSingle{value: amountInMaximum}(
+        amountUsed = s_swapRouter.exactOutputSingle{value: amountInMaximum}(
             params
         );
         s_swapRouter.refundETH();
-        return amountIn;
+        return amountUsed;
     }
 
     function checkUpkeep(bytes calldata)
@@ -135,10 +133,6 @@ contract LiquidatableExchange is Pausable, KeeperCompatible, Exchange {
     {
         uint256[] memory idsToLiquidate = abi.decode(performData, (uint256[]));
         liquidate(idsToLiquidate);
-    }
-
-    receive() external payable {
-        emit Received(msg.sender, msg.value);
     }
 
     /********************/

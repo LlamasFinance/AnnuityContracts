@@ -6,6 +6,7 @@ import "@nomiclabs/hardhat-waffle";
 import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
+import "hardhat-abi-exporter";
 
 dotenv.config();
 
@@ -31,9 +32,11 @@ const config: HardhatUserConfig = {
       { version: "0.7.6" },
     ],
   },
+  defaultNetwork: "hardhat",
   networks: {
-    ropsten: {
-      url: process.env.ROPSTEN_URL || "",
+    hardhat: {},
+    kovan: {
+      url: process.env.KOVAN_URL || "",
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
@@ -43,8 +46,24 @@ const config: HardhatUserConfig = {
     currency: "USD",
   },
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY,
+    apiKey: process.env.ETHERSCAN_API_KEY || "",
   },
+  abiExporter: [
+    {
+      path: "./abi/pretty",
+      runOnCompile: true,
+      clear: true,
+      spacing: 2,
+      pretty: true,
+    },
+    {
+      path: "./abi/ugly",
+      runOnCompile: true,
+      clear: true,
+      spacing: 2,
+      pretty: false,
+    },
+  ],
 };
 
 export default config;

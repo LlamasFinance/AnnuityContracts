@@ -1,6 +1,6 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import { Exchange, MockERC20, MockV3Aggregator } from "../../typechain";
 import {
   deployContract,
@@ -15,7 +15,7 @@ import {
 } from "./utils";
 
 // Interactions
-describe.skip("Exchange", function () {
+describe("Exchange", function () {
   let exchange: Exchange;
   let mockUSDC: MockERC20;
   let mockAggregator: MockV3Aggregator;
@@ -36,10 +36,17 @@ describe.skip("Exchange", function () {
       tokenDecimals,
     ])) as MockERC20;
     // Aggregator
-    mockAggregator = (await deployContract("MockV3Aggregator", deployer, [
-      pricefeedDecimals,
-      toPriceFeed(ethUsdcValue),
-    ])) as MockV3Aggregator;
+    if (network.name == "hardhat") {
+      mockAggregator = (await deployContract("MockV3Aggregator", deployer, [
+        pricefeedDecimals,
+        toPriceFeed(ethUsdcValue),
+      ])) as MockV3Aggregator;
+    } else if (network.name == "kovan") {
+      mockAggregator = await ethers.getContractAt(
+        "MockV3Aggregator",
+        "0x64EaC61A2DFda2c3Fa04eED49AA33D021AeC8838"
+      );
+    }
     // Init
     exchange.setLenderToken(mockUSDC.address, mockAggregator.address);
   });

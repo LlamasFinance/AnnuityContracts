@@ -79,6 +79,7 @@ contract Exchange is ReentrancyGuard, Ownable {
         uint256 indexed id
     );
     event Liquidate(address indexed borrower, uint256 remainingValue);
+    event Received(address sender, uint256 amount);
 
     function propose(
         uint256 amount,
@@ -206,7 +207,7 @@ contract Exchange is ReentrancyGuard, Ownable {
         emit WithdrawCollateral(agreement.borrower, id, amount);
     }
 
-        function close(uint256 id)
+    function close(uint256 id)
         external
         nonReentrant
         onlyIfLender(id)
@@ -228,8 +229,6 @@ contract Exchange is ReentrancyGuard, Ownable {
         return minInETH;
     }
 
-
-
     function getEthValueFromToken(uint256 amount)
         public
         view
@@ -247,6 +246,10 @@ contract Exchange is ReentrancyGuard, Ownable {
         return
             (amount * (10**(18 + priceFeedDecimals - tokenDecimals))) /
             uint256(price);
+    }
+
+    receive() external payable {
+        emit Received(msg.sender, msg.value);
     }
 
     /********************/
