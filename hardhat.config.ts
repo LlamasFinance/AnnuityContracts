@@ -31,12 +31,23 @@ const config: HardhatUserConfig = {
       { version: "0.6.6" },
       { version: "0.7.6" },
     ],
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+      },
+    },
   },
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {},
     kovan: {
       url: process.env.KOVAN_URL || "",
+      accounts:
+        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    },
+    rinkeby: {
+      url: process.env.RINKEBY_URL || "",
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
@@ -50,14 +61,14 @@ const config: HardhatUserConfig = {
   },
   abiExporter: [
     {
-      path: "./abi/pretty",
+      path: "./data/abi/pretty",
       runOnCompile: true,
       clear: true,
       spacing: 2,
       pretty: true,
     },
     {
-      path: "./abi/ugly",
+      path: "./data/abi/ugly",
       runOnCompile: true,
       clear: true,
       spacing: 2,

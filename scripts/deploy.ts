@@ -1,5 +1,7 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { ethers, network, waffle } from "hardhat";
+import { ethers, network } from "hardhat";
+import { writeFile } from "fs";
+import { join } from "path";
 import {
   LiquidatableExchange,
   MockERC20,
@@ -41,7 +43,12 @@ async function main() {
   } else if (network.name == "kovan") {
     mockAggregator = await ethers.getContractAt(
       "MockV3Aggregator",
-      "0x64EaC61A2DFda2c3Fa04eED49AA33D021AeC8838"
+      "0x64EaC61A2DFda2c3Fa04eED49AA33D021AeC8838" // Chainlink USDC/ETH kovan price feed
+    );
+  } else if (network.name == "rinkeby") {
+    mockAggregator = await ethers.getContractAt(
+      "MockV3Aggregator",
+      "0xdCA36F27cbC4E38aE16C4E9f99D39b42337F6dcf"
     );
   }
   // SwapRouter
@@ -55,16 +62,34 @@ async function main() {
     mockUSDC.address,
     mockAggregator!.address
   );
-  await liquidExchange.setKeeperRegistryAddress(deployer.address);
+  if (network.name == "hardhat") {
+    await liquidExchange.setKeeperRegistryAddress(deployer.address);
+  } else if (network.name == "kovan") {
+    await liquidExchange.setKeeperRegistryAddress(deployer.address);
+  } else if (network.name == "rinkeby") {
+    await liquidExchange.setKeeperRegistryAddress(deployer.address);
+  }
   await liquidExchange.setSwapRouter(mockSwapRouter.address, mockWETH.address);
 
-  console.log(
-    "Exchange address : %s\nUSDC address : %s\nAggregator address : %s\nMockSwapRouter address : %s\nMockWeth address : %s\n",
-    liquidExchange.address,
-    mockUSDC.address,
-    mockAggregator!.address,
-    mockSwapRouter.address,
+  const deployedAddresses = `Network name: ${
+    network.name
+  }\nDate: ${new Date().toLocaleString()}\nExchange address : ${
+    liquidExchange.address
+  }\nUSDC address : ${mockUSDC.address}\nAggregator address : ${
+    mockAggregator!.address
+  }\nMockSwapRouter address : ${mockSwapRouter.address}\nMockWeth address : ${
     mockWETH.address
+  }\n\n`;
+  console.log(deployedAddresses);
+
+  //   add abis and addresses to ../data/
+  writeFile(
+    join(__dirname, "../data/deployedAddresses.txt"),
+    deployedAddresses,
+    { flag: "a+" },
+    (err) => {
+      if (err) console.error(err);
+    }
   );
 }
 
