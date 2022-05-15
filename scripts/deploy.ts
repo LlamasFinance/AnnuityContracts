@@ -9,7 +9,12 @@ import {
   MockV3Aggregator,
   WETH9,
 } from "../typechain";
-import { deployContract, constants, toPriceFeed } from "../test/unit/utils";
+import {
+  deployContract,
+  constants,
+  toPriceFeed,
+  aggregatorAddresses,
+} from "../test/unit/utils";
 
 async function main() {
   let liquidExchange: LiquidatableExchange;
@@ -19,6 +24,7 @@ async function main() {
   let mockSwapRouter: MockSwapRouter;
   let deployer: SignerWithAddress;
   let { tokenDecimals, pricefeedDecimals, ethUsdcValue } = constants;
+  const aggregatorAddr = (aggregatorAddresses as any)[network.name];
   [deployer] = await ethers.getSigners();
 
   // Exchange
@@ -35,20 +41,15 @@ async function main() {
   // WEI
   mockWETH = (await deployContract("WETH9", deployer)) as WETH9;
   // Aggregator
-  if (network.name == "hardhat") {
+  if (!aggregatorAddr) {
     mockAggregator = (await deployContract("MockV3Aggregator", deployer, [
       pricefeedDecimals,
       toPriceFeed(ethUsdcValue),
     ])) as MockV3Aggregator;
-  } else if (network.name == "kovan") {
+  } else {
     mockAggregator = await ethers.getContractAt(
       "MockV3Aggregator",
-      "0x64EaC61A2DFda2c3Fa04eED49AA33D021AeC8838" // Chainlink USDC/ETH kovan price feed
-    );
-  } else if (network.name == "rinkeby") {
-    mockAggregator = await ethers.getContractAt(
-      "MockV3Aggregator",
-      "0xdCA36F27cbC4E38aE16C4E9f99D39b42337F6dcf"
+      aggregatorAddr
     );
   }
   // SwapRouter
@@ -56,19 +57,13 @@ async function main() {
     "MockSwapRouter",
     deployer
   )) as MockSwapRouter;
-  // Init
+  // Initialize
   await mockSwapRouter.setPriceFeed(mockAggregator!.address);
   await liquidExchange.setLenderToken(
     mockUSDC.address,
     mockAggregator!.address
   );
-  if (network.name == "hardhat") {
-    await liquidExchange.setKeeperRegistryAddress(deployer.address);
-  } else if (network.name == "kovan") {
-    await liquidExchange.setKeeperRegistryAddress(deployer.address);
-  } else if (network.name == "rinkeby") {
-    await liquidExchange.setKeeperRegistryAddress(deployer.address);
-  }
+  await liquidExchange.setKeeperRegistryAddress(deployer.address);
   await liquidExchange.setSwapRouter(mockSwapRouter.address, mockWETH.address);
 
   const deployedAddresses = `Network name: ${

@@ -5,11 +5,8 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/IUniswapRouter.sol";
+import "../interfaces/IToken.sol";
 import "hardhat/console.sol";
-
-interface IToken is IERC20Metadata {
-    function mint(address account, uint256 amount) external;
-}
 
 contract MockSwapRouter is IUniswapRouter, Ownable {
     AggregatorV3Interface public s_priceFeed;

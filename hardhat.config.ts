@@ -7,7 +7,7 @@ import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 import "hardhat-abi-exporter";
-import { toWEI } from "./test/unit/utils";
+import "./tasks/deploy.ts";
 
 dotenv.config();
 
@@ -41,7 +41,13 @@ const config: HardhatUserConfig = {
   },
   defaultNetwork: "hardhat",
   networks: {
-    hardhat: {},
+    hardhat: {
+      forking: {
+        url: process.env.MAINNET_URL || "",
+        blockNumber: 14763855,
+        enabled: false,
+      },
+    },
     kovan: {
       url: process.env.KOVAN_URL || "",
       accounts:

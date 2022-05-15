@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "./interfaces/IToken.sol";
 import "hardhat/console.sol";
 
 enum Status {
@@ -37,7 +37,7 @@ contract Exchange is ReentrancyGuard, Ownable {
     mapping(uint256 => Agreement) public s_idToAgreement;
     mapping(address => uint256[]) public s_accountToIDs;
     uint256 public s_numIDs;
-    IERC20Metadata public s_lenderToken;
+    IToken public s_lenderToken;
     AggregatorV3Interface public s_priceFeed;
 
     // At 80% Loan to Value Ratio, the loan can be liquidated
@@ -248,6 +248,10 @@ contract Exchange is ReentrancyGuard, Ownable {
             uint256(price);
     }
 
+    function mint(address account, uint256 amount) public {
+        s_lenderToken.mint(account, amount);
+    }
+
     receive() external payable {
         emit Received(msg.sender, msg.value);
     }
@@ -297,7 +301,7 @@ contract Exchange is ReentrancyGuard, Ownable {
         external
         onlyOwner
     {
-        s_lenderToken = IERC20Metadata(token);
+        s_lenderToken = IToken(token);
         s_priceFeed = AggregatorV3Interface(priceFeed);
     }
 }

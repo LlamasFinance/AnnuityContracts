@@ -18,6 +18,7 @@ import {
   toUSDC,
   proposeAgreement,
   repayEntireLoan,
+  aggregatorAddresses,
 } from "./utils";
 
 describe("LiquidatableExchange", async function () {
@@ -33,6 +34,7 @@ describe("LiquidatableExchange", async function () {
   //   SETUP
   this.beforeEach(async function () {
     let { tokenDecimals, pricefeedDecimals, ethUsdcValue } = constants;
+    const aggregatorAddr = (aggregatorAddresses as any)[network.name];
     [deployer, lender, borrower] = await ethers.getSigners();
     // Exchange
     liquidExchange = (await deployContract(
@@ -48,15 +50,15 @@ describe("LiquidatableExchange", async function () {
     // WEI
     mockWETH = (await deployContract("WETH9", deployer)) as WETH9;
     // Aggregator
-    if (network.name == "hardhat") {
+    if (!aggregatorAddr) {
       mockAggregator = (await deployContract("MockV3Aggregator", deployer, [
         pricefeedDecimals,
         toPriceFeed(ethUsdcValue),
       ])) as MockV3Aggregator;
-    } else if (network.name == "kovan") {
+    } else {
       mockAggregator = await ethers.getContractAt(
         "MockV3Aggregator",
-        "0x64EaC61A2DFda2c3Fa04eED49AA33D021AeC8838"
+        aggregatorAddr
       );
     }
     // SwapRouter

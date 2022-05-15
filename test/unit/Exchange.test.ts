@@ -12,6 +12,7 @@ import {
   toUSDC,
   proposeAgreement,
   repayEntireLoan,
+  aggregatorAddresses,
 } from "./utils";
 
 // Interactions
@@ -26,6 +27,8 @@ describe("Exchange", function () {
   //   SETUP
   this.beforeEach(async function () {
     let { tokenDecimals, pricefeedDecimals, ethUsdcValue } = constants;
+    const aggregatorAddr = (aggregatorAddresses as any)[network.name];
+
     [deployer, lender, borrower] = await ethers.getSigners();
     // Exchange
     exchange = (await deployContract("Exchange", deployer)) as Exchange;
@@ -36,15 +39,15 @@ describe("Exchange", function () {
       tokenDecimals,
     ])) as MockERC20;
     // Aggregator
-    if (network.name == "hardhat") {
+    if (!aggregatorAddr) {
       mockAggregator = (await deployContract("MockV3Aggregator", deployer, [
         pricefeedDecimals,
         toPriceFeed(ethUsdcValue),
       ])) as MockV3Aggregator;
-    } else if (network.name == "kovan") {
+    } else {
       mockAggregator = await ethers.getContractAt(
         "MockV3Aggregator",
-        "0x64EaC61A2DFda2c3Fa04eED49AA33D021AeC8838"
+        aggregatorAddr
       );
     }
     // Init
@@ -56,13 +59,21 @@ describe("Exchange", function () {
     expect(await exchange.s_lenderToken()).to.equal(mockUSDC.address);
     expect(await exchange.s_priceFeed()).to.equal(mockAggregator.address);
     console.log(
-      "Exchange address : %s\nUSDC address : %s\nAggregator address : %s\n",
+      "Network: %s\nExchange address : %s\nUSDC address : %s\nAggregator address : %s\n",
+      network.name,
       exchange.address,
       mockUSDC.address,
       mockAggregator.address
     );
   });
 
+  it("should be able to mint tokens", async () => {
+    const amount = toUSDC(100);
+    const balanceBefore = await mockUSDC.balanceOf(lender.address);
+    await exchange.mint(lender.address, amount);
+    const balanceAfter = await mockUSDC.balanceOf(lender.address);
+    expect(balanceAfter.sub(balanceBefore)).to.equal(amount);
+  });
   //   PROPOSE AGREEMENT
   describe("Agreement being proposed", async () => {
     let { lenderTokens, duration, rate, agreementID } = args;

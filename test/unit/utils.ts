@@ -30,6 +30,13 @@ export const constants = {
   secsPerYear: 31536000,
 };
 
+export const aggregatorAddresses = {
+  hardhat: undefined,
+  localhost: undefined, //"0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419",
+  kovan: "0x64EaC61A2DFda2c3Fa04eED49AA33D021AeC8838",
+  rinkeby: "0xdCA36F27cbC4E38aE16C4E9f99D39b42337F6dcf",
+};
+
 // UTILS
 export const toTokenBits = (
   amount: number | string | BigNumber,

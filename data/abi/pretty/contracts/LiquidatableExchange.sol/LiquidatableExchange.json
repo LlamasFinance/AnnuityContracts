@@ -29,6 +29,7 @@
   "function getMinReqCollateral(uint256) view returns (uint256)",
   "function isLiquidationRequired(uint256) view returns (bool)",
   "function liquidate(uint256[])",
+  "function mint(address,uint256)",
   "function owner() view returns (address)",
   "function paused() view returns (bool)",
   "function performUpkeep(bytes)",
